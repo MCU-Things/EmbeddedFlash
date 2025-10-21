@@ -47,12 +47,18 @@
 #endif
 
 // 扇区状态和角色的状态数量
-#define SECTOR_STATUS_NUM   4  // FREE, USING, FULL, (reserved)
+#define SECTOR_STATUS_NUM   3  // FREE, USING, FULL
 #define SECTOR_ROLE_NUM     5  // UNASSIGNED, DATA, GC_TEMP, GC, DATA_GCING
 
 // 状态表实际大小
 #define SECTOR_STATUS_TABLE_SIZE    STATUS_TABLE_SIZE(SECTOR_STATUS_NUM)
 #define SECTOR_ROLE_TABLE_SIZE      STATUS_TABLE_SIZE(SECTOR_ROLE_NUM)
+
+// KV记录状态数量（5种状态）
+#define KV_STATUS_NUM       5  // UNUSED, PRE_WRITE, WRITE, PRE_DELETE, DELETED
+
+// KV记录状态表大小
+#define KV_STATUS_TABLE_SIZE    STATUS_TABLE_SIZE(KV_STATUS_NUM)
 
 //数据类型
 typedef enum {
@@ -72,14 +78,14 @@ typedef enum {
     EFLASH_FORMAT_UNDEFINED = 0x0F,
 } EmbeddedFlash_data_type_e;
 
-//KV记录有效性
+//KV记录状态（使用索引值，对应状态表位置）
 typedef enum {
-    EFLASH_KV_DELETED    = 0x00,  // 已删除     (0000) - 删除完成，数据无效
-    EFLASH_KV_PRE_DELETE = 0x01,  // 预删除     (0001) - 准备删除，中间状态  
-    EFLASH_KV_WRITE      = 0x03,  // 已写入     (0011) - 写入完成，数据有效
-    EFLASH_KV_PRE_WRITE  = 0x07,  // 预写入     (0111) - 开始写入，数据可能不完整
-    EFLASH_KV_UNUSED     = 0x0F,  // 未使用     (1111) - 擦除后初始状态
-} EmbeddedFlash_record_valid_e;
+    EFLASH_KV_UNUSED     = 0,  // 未使用     - 擦除后初始状态（全FF）
+    EFLASH_KV_PRE_WRITE  = 1,  // 预写入     - 开始写入，数据可能不完整
+    EFLASH_KV_WRITE      = 2,  // 已写入     - 写入完成，数据有效
+    EFLASH_KV_PRE_DELETE = 3,  // 预删除     - 准备删除，中间状态
+    EFLASH_KV_DELETED    = 4,  // 已删除     - 删除完成，数据无效
+} EmbeddedFlash_record_status_e;
 
 // 错误类型枚举
 typedef enum {
@@ -134,7 +140,6 @@ typedef enum {
     EFLASH_SECTOR_STATUS_FREE = 0,      // 空闲（初始状态，全FF）
     EFLASH_SECTOR_STATUS_USING = 1,     // 使用中
     EFLASH_SECTOR_STATUS_FULL = 2,      // 已满
-    EFLASH_SECTOR_STATUS_UNUSED = 3,    // 保留
 } EmbeddedFlash_sector_status_e;
 
 //扇区角色（使用索引值，对应状态表位置）
@@ -172,19 +177,18 @@ typedef struct {
     uint8_t role;    // 参考枚举EFLASH_SECTOR_ROLE_e
 } sector_attr_t;
 
-typedef struct {
-    uint8_t valid:4;     // 有效性和版本号 (4 bit),支持版本管控
-    uint8_t data_type:4; // 数据类型0-15 (4 bits)
-} eflags_t;
+// KV记录偏移量定义（用于状态表和数据分离）
+#define KV_MAGIC_OFFSET      ((uint32_t)(&((KV_Record *)0)->magic))
 
-// KV记录结构
+// KV记录结构（状态表在最前面！）
 typedef struct {
-    uint8_t magic;       // 0xA5（协议头）
-    eflags_t flags;
-    uint8_t key;          // 键 (1B)
-    uint8_t value_length;       // 值的长度 (1B),仅指value字段的实际数据长度
-    uint8_t value[KV_MAX_VALUE_SIZE];    // 数据值
-    uint16_t crc;         // CRC16 校验码，只校验key、value_length、value
+    uint8_t status_table[KV_STATUS_TABLE_SIZE];  // 状态表（16字节，支持5种状态转换）
+    uint8_t magic;                                // 0xA5（协议头）
+    uint8_t data_type;                            // 数据类型（1字节）
+    uint8_t key;                                  // 键 (1B)
+    uint8_t value_length;                         // 值的长度 (1B),仅指value字段的实际数据长度
+    uint8_t value[KV_MAX_VALUE_SIZE];             // 数据值
+    uint16_t crc;                                 // CRC16 校验码，只校验key、value_length、value
 }KV_Record;
 
 // 扇区头信息结构（Flash中存储的格式）
@@ -202,7 +206,7 @@ typedef struct {
     uint8_t key;                    // 键
     void *value;   // 默认值指针
     uint8_t value_length;                 // 默认值长度
-    eflags_t flags;              //
+    uint8_t data_type;              // 数据类型
     uint8_t data_source; // 数据来源状态，参考枚举kv_data_source_e
 } kv_data_t;
 

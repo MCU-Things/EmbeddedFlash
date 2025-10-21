@@ -55,23 +55,23 @@ static uint64_t test_default_uint64_1 = 0x123456789ABCDEF0ULL;
 static int64_t test_default_int64_1 = -0x123456789ABCDEF0LL;
 
 static kv_data_t test_kvs[] = {
-	{0, TEST_UINT8_1_A1_161, (uint8_t*)&test_default_uint8_1, sizeof(test_default_uint8_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_UINT8}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_UINT8_1_A2_162, (uint8_t*)&test_default_uint8_2, sizeof(test_default_uint8_2), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_UINT8}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_UINT16_2_A3_163, (uint8_t*)&test_default_uint16_1, sizeof(test_default_uint16_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_UINT16}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_INT32_4_A4_164, (uint8_t*)&test_default_int32_1, sizeof(test_default_int32_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_INT32}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_STRING_8_A5_165, (uint8_t*)test_default_string_1, 7 + 1, {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_STRING}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_HEX_4_A6_166, test_default_hex_1, sizeof(test_default_hex_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_HEX}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_UINT16_2_A7_167, (uint8_t*)&test_default_uint16_2, sizeof(test_default_uint16_2), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_UINT16}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_INT32_4_A8_168, (uint8_t*)&test_default_int32_2, sizeof(test_default_int32_2), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_INT32}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_FLOAT_4_A9_169, (uint8_t*)&test_default_float_1, sizeof(test_default_float_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_FLOAT}, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_UINT8_1_A1_161, (uint8_t*)&test_default_uint8_1, sizeof(test_default_uint8_1), EFLASH_FORMAT_UINT8, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_UINT8_1_A2_162, (uint8_t*)&test_default_uint8_2, sizeof(test_default_uint8_2), EFLASH_FORMAT_UINT8, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_UINT16_2_A3_163, (uint8_t*)&test_default_uint16_1, sizeof(test_default_uint16_1), EFLASH_FORMAT_UINT16, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_INT32_4_A4_164, (uint8_t*)&test_default_int32_1, sizeof(test_default_int32_1), EFLASH_FORMAT_INT32, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_STRING_8_A5_165, (uint8_t*)test_default_string_1, 7 + 1, EFLASH_FORMAT_STRING, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_HEX_4_A6_166, test_default_hex_1, sizeof(test_default_hex_1), EFLASH_FORMAT_HEX, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_UINT16_2_A7_167, (uint8_t*)&test_default_uint16_2, sizeof(test_default_uint16_2), EFLASH_FORMAT_UINT16, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_INT32_4_A8_168, (uint8_t*)&test_default_int32_2, sizeof(test_default_int32_2), EFLASH_FORMAT_INT32, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_FLOAT_4_A9_169, (uint8_t*)&test_default_float_1, sizeof(test_default_float_1), EFLASH_FORMAT_FLOAT, KV_DATA_SOURCE_DEFAULT},
 	
 	// 新添加的数据类型键
-	{0, TEST_BOOL_1_AA_170, (uint8_t*)&test_default_bool_1, sizeof(test_default_bool_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_BOOL}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_INT8_1_AB_171, (uint8_t*)&test_default_int8_1, sizeof(test_default_int8_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_INT8}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_INT16_2_AC_172, (uint8_t*)&test_default_int16_1, sizeof(test_default_int16_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_INT16}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_UINT32_4_AD_173, (uint8_t*)&test_default_uint32_1, sizeof(test_default_uint32_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_UINT32}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_UINT64_8_AE_174, (uint8_t*)&test_default_uint64_1, sizeof(test_default_uint64_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_UINT64}, KV_DATA_SOURCE_DEFAULT},
-	{0, TEST_INT64_8_AF_175, (uint8_t*)&test_default_int64_1, sizeof(test_default_int64_1), {.valid=EFLASH_KV_WRITE, .data_type=EFLASH_FORMAT_INT64}, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_BOOL_1_AA_170, (uint8_t*)&test_default_bool_1, sizeof(test_default_bool_1), EFLASH_FORMAT_BOOL, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_INT8_1_AB_171, (uint8_t*)&test_default_int8_1, sizeof(test_default_int8_1), EFLASH_FORMAT_INT8, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_INT16_2_AC_172, (uint8_t*)&test_default_int16_1, sizeof(test_default_int16_1), EFLASH_FORMAT_INT16, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_UINT32_4_AD_173, (uint8_t*)&test_default_uint32_1, sizeof(test_default_uint32_1), EFLASH_FORMAT_UINT32, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_UINT64_8_AE_174, (uint8_t*)&test_default_uint64_1, sizeof(test_default_uint64_1), EFLASH_FORMAT_UINT64, KV_DATA_SOURCE_DEFAULT},
+	{0, TEST_INT64_8_AF_175, (uint8_t*)&test_default_int64_1, sizeof(test_default_int64_1), EFLASH_FORMAT_INT64, KV_DATA_SOURCE_DEFAULT},
 };
 
 static int test_embedded_flash_init(void) {
@@ -384,7 +384,7 @@ int embedded_flash_demo_gc_test(void) {
 	for (int round=0; round<6; round++) {
 		for (int i=0; i<count; i++) {
 			uint8_t key = test_kvs[i].key;
-			uint8_t data_type = test_kvs[i].flags.data_type;
+			uint8_t data_type = test_kvs[i].data_type;
 			
 			// 根据数据类型使用正确的API进行写入
 			int write_result = -1;
@@ -610,7 +610,7 @@ int embedded_flash_demo_stress_test(void) {
     // 从test_kvs中选择键，确保覆盖所有数据类型
     uint8_t total_kvs = sizeof(test_kvs) / sizeof(kv_data_t);
     for (uint8_t i = 0; i < total_kvs && num_test_keys < MAX_TEST_KEYS; i++) {
-        uint8_t dtype = test_kvs[i].flags.data_type;
+        uint8_t dtype = test_kvs[i].data_type;
         // 确保每种数据类型至少有一个键被选中
         if (type_coverage[dtype] < 2) {  // 每种类型最多选2个键
             test_key_indices[num_test_keys++] = i;
@@ -627,7 +627,7 @@ int embedded_flash_demo_stress_test(void) {
     for (int i = 0; i < num_test_keys; i++) {
         uint8_t idx = test_key_indices[i];
         const char* type_name = "UNKNOWN";
-        switch(test_kvs[idx].flags.data_type) {
+        switch(test_kvs[idx].data_type) {
             case EFLASH_FORMAT_BOOL:    type_name = "BOOL";    break;
             case EFLASH_FORMAT_UINT8:   type_name = "UINT8";   break;
             case EFLASH_FORMAT_INT8:    type_name = "INT8";    break;
@@ -641,7 +641,7 @@ int embedded_flash_demo_stress_test(void) {
             case EFLASH_FORMAT_STRING:  type_name = "STRING";  break;
             case EFLASH_FORMAT_HEX:     type_name = "HEX";     break;
         }
-        printf("  [%2d] Key 0x%02X - %-8s (type=%d)\n", i, test_kvs[idx].key, type_name, test_kvs[idx].flags.data_type);
+        printf("  [%2d] Key 0x%02X - %-8s (type=%d)\n", i, test_kvs[idx].key, type_name, test_kvs[idx].data_type);
     }
     printf("\n");
     
@@ -658,7 +658,7 @@ int embedded_flash_demo_stress_test(void) {
         // 循环选择键
         uint8_t key_idx = test_key_indices[i % num_test_keys];
         uint8_t key = test_kvs[key_idx].key;
-        uint8_t data_type = test_kvs[key_idx].flags.data_type;
+        uint8_t data_type = test_kvs[key_idx].data_type;
         
         // 根据数据类型生成测试数据并写入
         int write_result = -1;
@@ -1058,7 +1058,7 @@ int embedded_flash_demo_gc_stress_test(void) {
             
             // 写入数据 - 根据数据类型选择合适的API
             int write_result = -1;
-            switch (test_kvs[i].flags.data_type) {
+            switch (test_kvs[i].data_type) {
                 case EFLASH_FORMAT_UINT8:
                     write_result = embedded_flash_set_uint8(test_kvs[i].key, test_buffer.raw[0]);
                     break;
@@ -1124,7 +1124,7 @@ int embedded_flash_demo_gc_stress_test(void) {
             
             if (write_result != 0) {
                 printf("GC stress test write failed at round %d, key %d (0x%02X), data_type=%d\n", 
-                       round, test_kvs[i].key, test_kvs[i].key, test_kvs[i].flags.data_type);
+                       round, test_kvs[i].key, test_kvs[i].key, test_kvs[i].data_type);
                 return -1;
             }
 //            if (embedded_flash_set(test_kvs[i].key, test_data, test_kvs[i].value_length, test_kvs[i].flags.data_type) != 0) {
@@ -2056,7 +2056,7 @@ int embedded_flash_demo_verify_integrity(void) {
 			continue; 
 		}
 		if (len!=test_kvs[i].value_length) len_err++;
-		if (type!=test_kvs[i].flags.data_type) type_err++;
+		if (type!=test_kvs[i].data_type) type_err++;
 	}
 	if (type_err==0) print_pass("type_err verify"); else print_fail("type_err verify");
 	if (len_err==0) print_pass("len_err verify"); else print_fail("len_err verify");

@@ -27,36 +27,62 @@ Project File Date:  10/21/2025
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 7 (build 960)', folder: 'd:\Keil_v5\ARM\ARMCC\Bin'
 Build target 'Target 1'
-compiling EmbeddedFlash_port.c...
-APP\flash\EmbeddedFlash_port.c(181): warning:  #870-D: invalid multibyte character sequence
-          printf("‚ù? Flash erase failed, error=%d\n", result);
-APP\flash\EmbeddedFlash_port.c(184): warning:  #870-D: invalid multibyte character sequence
-      printf("‚ú? Flash erase successful\n");
-APP\flash\EmbeddedFlash_port.c(190): warning:  #870-D: invalid multibyte character sequence
-          printf("‚ù? Flash read failed, error=%d\n", result);
-APP\flash\EmbeddedFlash_port.c(196): warning:  #870-D: invalid multibyte character sequence
-              printf("‚ù? Erase verification failed at offset %d: expected=0xFF, actual=0x%02X\n", 
-APP\flash\EmbeddedFlash_port.c(201): warning:  #870-D: invalid multibyte character sequence
-      printf("‚ú? Erase verification successful\n");
-APP\flash\EmbeddedFlash_port.c(207): warning:  #870-D: invalid multibyte character sequence
-          printf("‚ù? Flash write failed, error=%d\n", result);
-APP\flash\EmbeddedFlash_port.c(210): warning:  #870-D: invalid multibyte character sequence
-      printf("‚ú? Flash write successful\n");
-APP\flash\EmbeddedFlash_port.c(214): warning:  #223-D: function "memset" declared implicitly
-      memset(read_data, 0, sizeof(read_data));
-APP\flash\EmbeddedFlash_port.c(217): warning:  #870-D: invalid multibyte character sequence
-          printf("‚ù? Flash read failed, error=%d\n", result);
-APP\flash\EmbeddedFlash_port.c(223): warning:  #870-D: invalid multibyte character sequence
-              printf("‚ù? Data mismatch at offset %d: expected=0x%02X, actual=0x%02X\n", 
-APP\flash\EmbeddedFlash_port.c(228): warning:  #870-D: invalid multibyte character sequence
-      printf("‚ú? Data verification successful\n");
-APP\flash\EmbeddedFlash_port.c(231): warning:  #870-D: invalid multibyte character sequence
-      printf("‚ú? All tests passed!\n\n");
-APP\flash\EmbeddedFlash_port.c: 12 warnings, 0 errors
+compiling EmbeddedFlash.c...
+APP\flash\EmbeddedFlash.c(276): warning:  #177-D: variable "status_table"  was declared but never referenced
+      uint8_t status_table[KV_STATUS_TABLE_SIZE];
+APP\flash\EmbeddedFlash.c(593): warning:  #111-D: statement is unreachable
+          return -1;
+APP\flash\EmbeddedFlash.c(602): warning:  #111-D: statement is unreachable
+              return -1;
+APP\flash\EmbeddedFlash.c(716): warning:  #111-D: statement is unreachable
+          return -1;
+APP\flash\EmbeddedFlash.c(869): warning:  #111-D: statement is unreachable
+                                  return -1;
+APP\flash\EmbeddedFlash.c(875): warning:  #111-D: statement is unreachable
+                                  return -1;
+APP\flash\EmbeddedFlash.c(886): warning:  #111-D: statement is unreachable
+                                      return -1;
+APP\flash\EmbeddedFlash.c(1187): warning:  #111-D: statement is unreachable
+                  return -1;
+APP\flash\EmbeddedFlash.c(1230): warning:  #111-D: statement is unreachable
+                                  return -1;
+APP\flash\EmbeddedFlash.c(1264): warning:  #111-D: statement is unreachable
+          return -1;
+APP\flash\EmbeddedFlash.c(1297): warning:  #111-D: statement is unreachable
+          return -1;
+APP\flash\EmbeddedFlash.c(1427): warning:  #111-D: statement is unreachable
+      return -1;
+APP\flash\EmbeddedFlash.c(1507): warning:  #111-D: statement is unreachable
+                          return -1;
+APP\flash\EmbeddedFlash.c(1513): warning:  #111-D: statement is unreachable
+                          return -1;
+APP\flash\EmbeddedFlash.c(1651): warning:  #111-D: statement is unreachable
+                  return -1;
+APP\flash\EmbeddedFlash.c(1661): warning:  #111-D: statement is unreachable
+                  return -1;
+APP\flash\EmbeddedFlash.c(1690): warning:  #111-D: statement is unreachable
+      return -1;
+APP\flash\EmbeddedFlash.c(1748): warning:  #188-D: enumerated type mixed with another type
+  	return status; // ÂÖúÂ∫ï
+APP\flash\EmbeddedFlash.c(166): warning:  #177-D: function "_kv_set_status"  was declared but never referenced
+  static size_t _kv_set_status(uint8_t status_table[], size_t status_index)
+APP\flash\EmbeddedFlash.c(199): warning:  #177-D: function "_kv_read_status"  was declared but never referenced
+  static size_t _kv_read_status(uint32_t addr, uint8_t status_table[])
+APP\flash\EmbeddedFlash.c(215): warning:  #177-D: function "_kv_write_record"  was declared but never referenced
+  static FlashErrCode _kv_write_record(uint32_t addr, const KV_Record *kv_record)
+APP\flash\EmbeddedFlash.c(273): warning:  #177-D: function "_kv_read_record"  was declared but never referenced
+  static FlashErrCode _kv_read_record(uint32_t addr, KV_Record *kv_record, EmbeddedFlash_record_status_e *status)
+APP\flash\EmbeddedFlash.c(302): warning:  #177-D: function "_kv_recovery_record"  was declared but never referenced
+  static FlashErrCode _kv_recovery_record(uint32_t addr, const KV_Record *kv_record, EmbeddedFlash_record_status_e status)
+APP\flash\EmbeddedFlash.c: 23 warnings, 0 errors
+compiling embedded_flash_demo_tests.c...
+APP\flash\embedded_flash_demo_tests.c(1921): warning:  #870-D: invalid multibyte character sequence
+  	printf("‚ö? Power loss simulation: Reinitializing flash system...\n");
+APP\flash\embedded_flash_demo_tests.c: 1 warning, 0 errors
 linking...
-Program Size: Code=42428 RO-data=2884 RW-data=412 ZI-data=5332  
+Program Size: Code=42412 RO-data=2816 RW-data=412 ZI-data=5332  
 FromELF: creating hex file...
-".\Obj\Template.axf" - 0 Error(s), 12 Warning(s).
+".\Obj\Template.axf" - 0 Error(s), 24 Warning(s).
 
 <h2>Software Packages used:</h2>
 
