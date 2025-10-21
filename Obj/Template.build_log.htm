@@ -1,0 +1,75 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: ¶ÃVision V5.34.0.0
+Copyright (C) 2021 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: 1 1, 1, LIC=GMZI6-DZ4V1-GK0BG-VZ97T-NK0D1-W0BPV
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Plus  Version: 5.34.0.0
+Toolchain Path:  d:\Keil_v5\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.06 update 7 (build 960)
+Assembler:       Armasm.exe V5.06 update 7 (build 960)
+Linker/Locator:  ArmLink.exe V5.06 update 7 (build 960)
+Library Manager: ArmAr.exe V5.06 update 7 (build 960)
+Hex Converter:   FromElf.exe V5.06 update 7 (build 960)
+CPU DLL:         SARMCM3.DLL V5.34.0.0
+Dialog DLL:      DCM.DLL V1.17.3.0
+Target DLL:      Segger\JL2CM3.dll V2.99.38.0
+Dialog DLL:      TCM.DLL V1.48.0.0
+ 
+<h2>Project:</h2>
+E:\¥Ê¥¢\stm32f103zet6\Template.uvprojx
+Project File Date:  10/21/2025
+
+<h2>Output:</h2>
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'd:\Keil_v5\ARM\ARMCC\Bin'
+Build target 'Target 1'
+compiling EmbeddedFlash_port.c...
+APP\flash\EmbeddedFlash_port.c(181): warning:  #870-D: invalid multibyte character sequence
+          printf("‚ù? Flash erase failed, error=%d\n", result);
+APP\flash\EmbeddedFlash_port.c(184): warning:  #870-D: invalid multibyte character sequence
+      printf("‚ú? Flash erase successful\n");
+APP\flash\EmbeddedFlash_port.c(190): warning:  #870-D: invalid multibyte character sequence
+          printf("‚ù? Flash read failed, error=%d\n", result);
+APP\flash\EmbeddedFlash_port.c(196): warning:  #870-D: invalid multibyte character sequence
+              printf("‚ù? Erase verification failed at offset %d: expected=0xFF, actual=0x%02X\n", 
+APP\flash\EmbeddedFlash_port.c(201): warning:  #870-D: invalid multibyte character sequence
+      printf("‚ú? Erase verification successful\n");
+APP\flash\EmbeddedFlash_port.c(207): warning:  #870-D: invalid multibyte character sequence
+          printf("‚ù? Flash write failed, error=%d\n", result);
+APP\flash\EmbeddedFlash_port.c(210): warning:  #870-D: invalid multibyte character sequence
+      printf("‚ú? Flash write successful\n");
+APP\flash\EmbeddedFlash_port.c(214): warning:  #223-D: function "memset" declared implicitly
+      memset(read_data, 0, sizeof(read_data));
+APP\flash\EmbeddedFlash_port.c(217): warning:  #870-D: invalid multibyte character sequence
+          printf("‚ù? Flash read failed, error=%d\n", result);
+APP\flash\EmbeddedFlash_port.c(223): warning:  #870-D: invalid multibyte character sequence
+              printf("‚ù? Data mismatch at offset %d: expected=0x%02X, actual=0x%02X\n", 
+APP\flash\EmbeddedFlash_port.c(228): warning:  #870-D: invalid multibyte character sequence
+      printf("‚ú? Data verification successful\n");
+APP\flash\EmbeddedFlash_port.c(231): warning:  #870-D: invalid multibyte character sequence
+      printf("‚ú? All tests passed!\n\n");
+APP\flash\EmbeddedFlash_port.c: 12 warnings, 0 errors
+linking...
+Program Size: Code=42428 RO-data=2884 RW-data=412 ZI-data=5332  
+FromELF: creating hex file...
+".\Obj\Template.axf" - 0 Error(s), 12 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: Keil
+                http://www.keil.com/pack/Keil.STM32F1xx_DFP.1.0.5.pack
+                Keil.STM32F1xx_DFP.1.0.5
+                STMicroelectronics STM32F1 Series Device Support, Drivers and Examples
+
+<h2>Collection of Component include folders:</h2>
+  d:\Keil_v5\ARM\PACK\Keil\STM32F1xx_DFP\1.0.5\Device\Include
+
+<h2>Collection of Component Files used:</h2>
+Build Time Elapsed:  00:00:01
+</pre>
+</body>
+</html>
