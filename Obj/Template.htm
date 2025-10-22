@@ -3,7 +3,7 @@
 <title>Static Call Graph - [.\Obj\Template.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image .\Obj\Template.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Tue Oct 21 23:44:59 2025
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Wed Oct 22 10:05:28 2025
 <BR><P>
 <H3>Maximum Stack Usage =        904 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -1932,7 +1932,7 @@ Local Symbols
 <LI><a href="#[88]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_is_kv_record
 </UL>
 
-<P><STRONG><a name="[a6]"></a>embedded_flash_gc</STRONG> (Thumb, 858 bytes, Stack size 168 bytes, embeddedflash.o(i.embedded_flash_gc))
+<P><STRONG><a name="[a6]"></a>embedded_flash_gc</STRONG> (Thumb, 860 bytes, Stack size 168 bytes, embeddedflash.o(i.embedded_flash_gc))
 <BR><BR>[Stack]<UL><LI>Max Depth = 496<LI>Call Chain = embedded_flash_gc &rArr; _execute_gc_operation &rArr; _write_record_to_sector &rArr; _sector_header_write &rArr; _write_status &rArr; flash_port_write &rArr; FLASH_ProgramWord &rArr; FLASH_WaitForLastOperation
 </UL>
 <BR>[Calls]<UL><LI><a href="#[86]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;flash_port_read
@@ -1970,7 +1970,7 @@ Local Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;embedded_flash_set
 </UL>
 
-<P><STRONG><a name="[d6]"></a>embedded_flash_set</STRONG> (Thumb, 694 bytes, Stack size 144 bytes, embeddedflash.o(i.embedded_flash_set))
+<P><STRONG><a name="[d6]"></a>embedded_flash_set</STRONG> (Thumb, 702 bytes, Stack size 144 bytes, embeddedflash.o(i.embedded_flash_set))
 <BR><BR>[Stack]<UL><LI>Max Depth = 656<LI>Call Chain = embedded_flash_set &rArr; _write_record &rArr; embedded_flash_gc &rArr; _execute_gc_operation &rArr; _write_record_to_sector &rArr; _sector_header_write &rArr; _write_status &rArr; flash_port_write &rArr; FLASH_ProgramWord &rArr; FLASH_WaitForLastOperation
 </UL>
 <BR>[Calls]<UL><LI><a href="#[86]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;flash_port_read

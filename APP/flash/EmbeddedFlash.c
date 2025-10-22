@@ -201,41 +201,7 @@ static size_t _kv_read_status(uint32_t addr, uint8_t status_table[])
     return _read_status(addr, status_table, KV_STATUS_NUM);
 }
 
-/**
- * @brief 写入KV记录头（分阶段提交 - 阶段1）
- * @param addr KV记录地址
- * @param kv_record KV记录数据（包含完整数据）
- * @return FLASH_NO_ERR=成功, 其他=失败
- * 
- * @note 写入流程：
- *       1. 写入状态表，标记为PRE_WRITE（写入addr+0）
- *       2. 写入数据部分，从magic开始（写入addr+KV_MAGIC_OFFSET）
- *       3. 更新状态表，标记为WRITE（写入addr+4）
- */
-static FlashErrCode _kv_write_record(uint32_t addr, const KV_Record *kv_record)
-{
-    FlashErrCode result = FLASH_NO_ERR;
-    uint8_t status_table[KV_STATUS_TABLE_SIZE];
-    
-    /* 阶段1：标记为"预写入" */
-    result = _kv_write_status(addr, status_table, EFLASH_KV_PRE_WRITE);
-    if (result != FLASH_NO_ERR) {
-        return result;
-    }
-    
-    /* 阶段2：写入数据（跳过status_table，从magic开始） */
-    result = flash_port_write(addr + KV_MAGIC_OFFSET, 
-                             (const uint32_t *)&kv_record->magic, 
-                             sizeof(KV_Record) - KV_MAGIC_OFFSET);
-    if (result != FLASH_NO_ERR) {
-        return result;
-    }
-    
-    /* 阶段3：标记为"已写入" */
-    result = _kv_write_status(addr, status_table, EFLASH_KV_WRITE);
-    
-    return result;
-}
+
 
 /**
  * @brief 删除KV记录（分阶段提交）
@@ -592,7 +558,7 @@ static int embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length,
         EFLASH_ASSERT(0);
         return -1;
     }
-		
+	memcpy(record.status_table, status_table, KV_STATUS_TABLE_SIZE);
     //如果不相等，那么内部有大于2条数据记录，需要将旧记录设置为删除
     if(p_kv_data->addr_abs != new_write_abs_addr){
         //使用状态表机制删除旧记录
@@ -755,8 +721,9 @@ static int embedded_flash_gc(void) {
     int gc_sector_pos, data_sector_pos;
     uint32_t gc_temp_resume_empty_addr_abs = 0;
     uint32_t data_gcing_resume_addr_abs = 0;
-    printf("Starting GC operation\n");
+    
     embedded_flash_status_t status = embedded_flash_get_status();
+    printf("Starting GC operation, status=%d\n", status);
     switch(status){
         case EFLASH_STATUS_NORMAL:{
             // 获取当前GC扇区

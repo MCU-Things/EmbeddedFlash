@@ -135,7 +135,7 @@
         <SetRegEntry>
           <Number>0</Number>
           <Key>DLGUARM</Key>
-          <Name>d</Name>
+          <Name></Name>
         </SetRegEntry>
         <SetRegEntry>
           <Number>0</Number>
@@ -157,57 +157,9 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>95</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134254752</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash.c\95</Expression>
-        </Bp>
-        <Bp>
-          <Number>1</Number>
-          <Type>0</Type>
-          <LineNumber>104</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134254770</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash.c\104</Expression>
-        </Bp>
-        <Bp>
-          <Number>2</Number>
-          <Type>0</Type>
-          <LineNumber>119</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134254802</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash.c\119</Expression>
-        </Bp>
-        <Bp>
-          <Number>3</Number>
-          <Type>0</Type>
           <LineNumber>948</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134229074</Address>
+          <Address>134253454</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -219,11 +171,11 @@
           <Expression>\\Template\APP/flash/EmbeddedFlash.c\948</Expression>
         </Bp>
         <Bp>
-          <Number>4</Number>
+          <Number>1</Number>
           <Type>0</Type>
           <LineNumber>1047</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134229588</Address>
+          <Address>134227922</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -232,14 +184,30 @@
           <BreakIfRCount>1</BreakIfRCount>
           <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash.c\1047</Expression>
+          <Expression>\\\APP/flash/EmbeddedFlash.c\1047</Expression>
+        </Bp>
+        <Bp>
+          <Number>2</Number>
+          <Type>0</Type>
+          <LineNumber>28</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>134259678</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>1</BreakIfRCount>
+          <Filename>E:\瀛樺偍\stm32f103zet6\User\main.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression>\\Template\User/main.c\28</Expression>
         </Bp>
       </Breakpoint>
       <MemoryWindow1>
         <Mm>
           <WinNumber>1</WinNumber>
           <SubType>0</SubType>
-          <ItemText>0x08060000</ItemText>
+          <ItemText>0x8060200</ItemText>
           <AccSizeX>0</AccSizeX>
         </Mm>
       </MemoryWindow1>
