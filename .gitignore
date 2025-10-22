@@ -15,7 +15,8 @@
 #编译输出文件夹
 */Output/
 */Obj/
-
+Output/
+Obj/
 # Source Files
 !*.A51
 !*.A66
