@@ -88,12 +88,15 @@ FlashErrCode flash_port_erase(uint32_t addr, size_t size) {
     FLASH_Unlock();
     FLASH_ClearFlag(FLASH_FLAG_BSY | FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
     
+    /* 开始擦除页面 */
     for (i = 0; i < erase_pages; i++) {
-        flash_status = FLASH_ErasePage(addr + (FLASH_PAGE_SIZE * i));
+        uint32_t page_addr = addr + (FLASH_PAGE_SIZE * i);
+        flash_status = FLASH_ErasePage(page_addr);
+        
         if (flash_status != FLASH_COMPLETE) {
-            result = FLASH_ERASE_ERR;
             printf("Flash: Erase failed at page %d, addr=0x%08X, status=%d\n", 
-                   i, addr + (FLASH_PAGE_SIZE * i), flash_status);
+                   i, page_addr, flash_status);
+            result = FLASH_ERASE_ERR;
             break;
         }
     }
@@ -117,26 +120,39 @@ FlashErrCode flash_port_write(uint32_t addr, const uint32_t *buf, size_t size) {
     FlashErrCode result = FLASH_NO_ERR;
     size_t i;
     uint32_t read_data;
+    FLASH_Status flash_status;
 
     /* 参数检查 */
     if (addr < FLASH_START_ADDR || addr > FLASH_END_ADDR || 
         size > (FLASH_END_ADDR - addr + 1) || buf == NULL) {
+        printf("Flash: Invalid parameters - addr=0x%08X, size=%d, buf=%p\n", addr, size, buf);
         return FLASH_PARAM_ERR;
     }
 
-    
+    /* 检查地址对齐 */
+    if (addr % 4 != 0) {
+        printf("Flash: Address not 4-byte aligned: 0x%08X\n", addr);
+        return FLASH_PARAM_ERR;
+    }
+
     FLASH_Unlock();
     FLASH_ClearFlag(FLASH_FLAG_BSY | FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
     
     for (i = 0; i < size; i += 4, buf++, addr += 4) {
         /* 写入数据 */
-        FLASH_ProgramWord(addr, *buf);
+        flash_status = FLASH_ProgramWord(addr, *buf);
+        if (flash_status != FLASH_COMPLETE) {
+            printf("Flash: Program failed at 0x%08X, status=%d\n", addr, flash_status);
+            result = FLASH_WRITE_ERR;
+            break;
+        }
+
+        /* 验证写入 */
         read_data = *(uint32_t *)addr;
-        /* 检查数据 */
         if (read_data != *buf) {
             result = FLASH_WRITE_ERR;
-            printf("Flash: Write verification failed at 0x%08X, expected=0x%08X, actual=0x%08X, diff=0x%08X\n",
-                   addr, *buf, read_data, *buf ^ read_data);
+            printf("Flash: Write verification failed at 0x%08X, expected=0x%08X, actual=0x%08X\n",
+                   addr, *buf, read_data);
             break;
         }
     }

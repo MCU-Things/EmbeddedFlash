@@ -31,10 +31,47 @@ static eflash_erase_stats_t m_erase_stats = {
 #endif
 
 // 内部函数声明
-//状态表操作函数
+//状态表操作函数（核心机制：通过写入不同4字节地址实现状态转换，避免重复写Flash）
+/**
+ * @brief 设置状态表（RAM操作）
+ * @param status_table 状态表缓冲区（输出）
+ * @param status_num 状态总数（例如：扇区状态有3种，扇区角色有5种，KV记录状态有5种）
+ * @param status_index 目标状态索引（0=初始状态，1/2/3...=后续状态）
+ * @return 需要写入Flash的字节索引（~0UL表示无需写入，因为状态0全是0xFF）
+ * @note 状态表原理：每个状态占用4字节（32位写入粒度），从0xFF变为0x00表示状态转换
+ *       例如：status0(全FF) → status1(0x00FFFFFF) → status2(0x0000FFFF) → ...
+ */
 static size_t _set_status(uint8_t status_table[], size_t status_num, size_t status_index);
+
+/**
+ * @brief 获取状态表的当前状态（RAM操作）
+ * @param status_table 状态表缓冲区（输入）
+ * @param status_num 状态总数
+ * @return 当前状态索引（从后往前找第一个0x00的位置）
+ * @note 读取逻辑：从后往前扫描，找到第一个0x00字节，即为当前状态
+ */
 static size_t _get_status(uint8_t status_table[], size_t status_num);
+
+/**
+ * @brief 写入状态到Flash（Flash写操作）
+ * @param addr Flash地址（状态表起始地址）
+ * @param status_table 状态表缓冲区（用于临时存储）
+ * @param status_num 状态总数
+ * @param status_index 目标状态索引
+ * @return FlashErrCode 错误码
+ * @note 写入策略：只写入需要改变的4字节位置（从0xFF→0x00），不重复写已编程的位置
+ *       例如：从status1→status2，只写入status2对应的4字节地址
+ */
 static FlashErrCode _write_status(uint32_t addr, uint8_t status_table[], size_t status_num, size_t status_index);
+
+/**
+ * @brief 从Flash读取状态表并返回当前状态（Flash读操作）
+ * @param addr Flash地址（状态表起始地址）
+ * @param status_table 状态表缓冲区（输出）
+ * @param total_num 状态总数
+ * @return 当前状态索引
+ * @note 等价于：flash_port_read() + _get_status()
+ */
 static size_t _read_status(uint32_t addr, uint8_t status_table[], size_t total_num);
 
 //初始化有关函数
@@ -58,6 +95,7 @@ static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p
 //头信息有关函数
 static bool _is_sector_header(const sector_header_t *header);
 static int _sector_header_read(uint8_t sector_idx, sector_header_t *header);
+static int _sector_header_compare(uint8_t sector_idx, uint8_t status, uint8_t role);
 static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role);
 
 //gc有关函数
@@ -100,17 +138,16 @@ static size_t _set_status(uint8_t status_table[], size_t status_num, size_t stat
  */
 static size_t _get_status(uint8_t status_table[], size_t status_num)
 {
-    size_t i = 0, status_num_bak = --status_num;
+    size_t i;
     
-    while (status_num--) {
-        /* 从后往前查找第一个0x00的位置 */
-        if (status_table[status_num * EFLASH_WRITE_GRAN / 8] == 0x00) {
-            break;
+    /* 从前往后查找第一个0x00的位置 */
+    for (i = 0; i < status_num; i++) {
+        if (status_table[i * EFLASH_WRITE_GRAN / 8] == 0x00) {
+            return i;  /* 找到第一个0x00，返回对应状态索引 */
         }
-        i++;
     }
     
-    return status_num_bak - i;
+    return 0;  /* 全FF，返回状态0 */
 }
 
 /**
@@ -284,6 +321,32 @@ static FlashErrCode _kv_recovery_record(uint32_t addr, const KV_Record *kv_recor
     
     return result;
 }
+
+// 获取数据类型的固定长度
+uint8_t embedded_flash_get_type_size(uint8_t data_type) {
+    switch (data_type) {
+        case EFLASH_FORMAT_BOOL:
+        case EFLASH_FORMAT_UINT8:
+        case EFLASH_FORMAT_INT8:
+            return 1;
+        case EFLASH_FORMAT_UINT16:
+        case EFLASH_FORMAT_INT16:
+            return 2;
+        case EFLASH_FORMAT_FLOAT:
+        case EFLASH_FORMAT_UINT32:
+        case EFLASH_FORMAT_INT32:
+            return 4;
+        case EFLASH_FORMAT_UINT64:
+        case EFLASH_FORMAT_INT64:
+            return 8;
+        case EFLASH_FORMAT_STRING:
+        case EFLASH_FORMAT_HEX:
+            return 0; // 可变长度，需要用户指定
+        default:
+            return 0;
+    }
+}
+
 /**
  * @brief 初始化持久化存储组件
  * @note 1. 初始化时，会扫描所有扇区，并重建扇区信息
@@ -309,6 +372,8 @@ int embedded_flash_init(const kv_data_t *defaults, uint8_t default_count) {
         printf("EmbeddedFlash: Sector[%d] addr=0x%08X, status=%d, role=%d\n", 
                i, m_sector_desc_list[i].sector_addr, 
                m_sector_desc_list[i].attr.status, m_sector_desc_list[i].attr.role);
+               printf("EmbeddedFlash: Sector[%d] free_space=%d\n", i, m_sector_desc_list[i].free_space);
+               printf("EmbeddedFlash: Sector[%d] record_count=%d\n", i, m_sector_desc_list[i].record_count);
     }
 
 restart_init://重新开始
@@ -316,10 +381,6 @@ restart_init://重新开始
     if (defaults == NULL || default_count == 0 || default_count > 255) {
         return -1;
     }
-    // 移除错误的全局擦除逻辑 - 这会导致数据丢失
-    // for(uint8_t g =0;g<KV_SECTOR_COUNT;g++){
-    //     _erase_sector(g);
-    // }
     mp_kv_list = (kv_data_t *)defaults;  // 转换为非const指针
     m_kv_data_list_count = default_count;
     
@@ -902,7 +963,9 @@ static int embedded_flash_gc(void) {
     data_gcing_resume_addr_abs = m_sector_desc_list[data_sector_pos].sector_addr+sizeof(sector_header_t);
     
     // 将GC区设置为临时GC区，确保原子性操作
+
     _sector_header_write(gc_sector_pos, m_sector_desc_list[gc_sector_pos].attr.status, EFLASH_SECTOR_ROLE_GC_TEMP);
+    
     
     // 设置为GC进行时状态，标记正在被GC的数据区
     _sector_header_write(data_sector_pos, m_sector_desc_list[data_sector_pos].attr.status, EFLASH_SECTOR_ROLE_DATA_GCING);
@@ -965,29 +1028,31 @@ gc_operation_handle:
 
 static int _startup_rebuild_sector(void)
 {
-	for(uint8_t i = 0; i < (KV_SECTOR_COUNT-1); i++){
+	for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
         //擦除扇区
         int ret = _erase_sector(i);
         //重建扇区，写入新的头信息
-        ret |= _sector_header_write(i, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_DATA);
-        if(ret != 0){
-                return -1;
+        if(i == KV_SECTOR_COUNT-1) {
+            ret |= _sector_header_write(i, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_GC);
+        }else{
+            ret |= _sector_header_write(i, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_DATA);
         }
-	}
-	return _sector_header_write(KV_SECTOR_COUNT-1, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_GC);
-		
+        if(ret != 0){
+            return -1;
+        }
+	}	
+	return 0;
 }
 static void _startup_restore_sector_attr(void) {
     
     for (int i = 0; i < KV_SECTOR_COUNT; i++) {
         sector_header_t header = {0};
         if(_sector_header_read(i, &header) != 0) {
-            m_sector_desc_list[i].attr.status = EFLASH_SECTOR_STATUS_FREE;
-            m_sector_desc_list[i].attr.role = EFLASH_SECTOR_ROLE_UNASSIGNED;
             continue;
+        }else{
+            //to do..
+            //如果没有头信息该怎么办
         }
-        // 状态表机制已经通过_sector_header_read更新了m_sector_desc_list[i].attr
-        // 无需额外操作
     }
 }
 /**
@@ -1363,35 +1428,32 @@ static bool _is_kv_record(const KV_Record *record) {
  * @brief 擦除扇区
  */
 static int _erase_sector(uint8_t sector_idx) {
-    if (sector_idx < KV_SECTOR_COUNT) {
-        printf("EmbeddedFlash: Erasing sector %d at address 0x%08X, size=%d\n", 
-               sector_idx, m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE);
-        if (flash_port_erase(m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE) == FLASH_NO_ERR) {
-                // 重置扇区信息
-                m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
-                m_sector_desc_list[sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);  // 减去扇区头大小
-                m_sector_desc_list[sector_idx].record_count = 0;
-                
-                #if EFLASH_ENABLE_ERASE_COUNTER
-                // 更新擦除统计信息
-                m_erase_stats.sector_erase_count[sector_idx]++;
-                m_erase_stats.total_erase_count++;
-                
-                // 更新最大擦除次数信息
-                if (m_erase_stats.sector_erase_count[sector_idx] > m_erase_stats.max_erase_count) {
-                    m_erase_stats.max_erase_count = m_erase_stats.sector_erase_count[sector_idx];
-                    m_erase_stats.max_erase_sector_idx = sector_idx;
-                }
-                #endif
-                
-                return 0;  
-        }
+
+    printf("EmbeddedFlash: Erasing sector %d at address 0x%08X, size=%d\n", 
+            sector_idx, m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE);
+    if (flash_port_erase(m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE) == FLASH_NO_ERR) {
+            // 重置扇区信息
+            m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
+            m_sector_desc_list[sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);  // 减去扇区头大小
+            m_sector_desc_list[sector_idx].record_count = 0;
+            
+            #if EFLASH_ENABLE_ERASE_COUNTER
+            // 更新擦除统计信息
+            m_erase_stats.sector_erase_count[sector_idx]++;
+            m_erase_stats.total_erase_count++;
+            
+            // 更新最大擦除次数信息
+            if (m_erase_stats.sector_erase_count[sector_idx] > m_erase_stats.max_erase_count) {
+                m_erase_stats.max_erase_count = m_erase_stats.sector_erase_count[sector_idx];
+                m_erase_stats.max_erase_sector_idx = sector_idx;
+            }
+            #endif
+            return 0;  
     }else{
         printf("erase sector failed, sector_idx=%d\n", sector_idx);
         EFLASH_ASSERT(0);
+        return -1;
     }
-    EFLASH_ASSERT(0);
-    return -1;
 }
 
 
@@ -1500,8 +1562,10 @@ static int _execute_gc_operation(int gc_temp_sector_idx, int data_gcing_sector_i
     }
     // ==================== 扇区角色切换阶段 ====================
     // 步骤1: 将原GC_TEMP扇区转为DATA扇区
-    _sector_header_write(gc_temp_sector_idx, gc_sector_status, EFLASH_SECTOR_ROLE_DATA);
-
+    int result = _sector_header_compare(gc_temp_sector_idx, gc_sector_status, EFLASH_SECTOR_ROLE_DATA);
+    if(result != 0) {
+        _sector_header_write(gc_temp_sector_idx, gc_sector_status, EFLASH_SECTOR_ROLE_DATA);
+    }
     // 步骤2: 将被GC的数据扇区直接擦除并设为GC扇区
     if (_erase_sector(data_gcing_sector_idx) != 0) {
         return -1;
@@ -1526,7 +1590,8 @@ static int _execute_gc_operation(int gc_temp_sector_idx, int data_gcing_sector_i
  * @note 这是循环存储模式的关键实现
  * @return 扇区索引，-1表示所有数据扇区都满了，需要GC
  */
-static int _find_writable_data_sector(uint16_t required_space) {
+static int _find_writable_data_sector(uint16_t required_space) 
+{
     int gc_sector = _find_sector_role(EFLASH_SECTOR_ROLE_GC);
     if (gc_sector >= 0) {
         // 遍历所有数据扇区，寻找有足够空间的扇区
@@ -1587,6 +1652,29 @@ static int _sector_header_read(uint8_t sector_idx, sector_header_t *header) {
     return -1;
 }
 
+//扇区信息比对
+static int _sector_header_compare(uint8_t sector_idx, uint8_t status, uint8_t role)
+{
+    sector_header_t current_header = {0};
+    /* 尝试读取当前扇区头 */
+    if (_sector_header_read(sector_idx, &current_header) == 0) {
+        uint8_t current_status = _get_status(current_header.status_table, SECTOR_STATUS_NUM);
+        uint8_t current_role = _get_status(current_header.role_table, SECTOR_ROLE_NUM);
+        if(current_status != status && current_role != role) {
+            return -4;
+        }
+        else if (current_status != status) {
+            return -2;
+        }
+        else if (current_role != role) {
+            return -3;
+        }
+        return 0;
+    }else{
+        //空扇区
+        return -1;
+    }
+}
 /**
  * @brief 写入扇区头信息
  * @param sector_idx 扇区索引
@@ -1594,44 +1682,45 @@ static int _sector_header_read(uint8_t sector_idx, sector_header_t *header) {
  * @param role 扇区角色
  * @return 0=成功, -1=失败
  */
-static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role) {
+static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role)
+{
     FlashErrCode result = FLASH_NO_ERR;
     
     if (sector_idx >= KV_SECTOR_COUNT) {
         return -1;
     }
-    
+
     uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
-    sector_header_t current_header = {0};
+    // sector_header_t current_header = {0};
     
-    /* 尝试读取当前扇区头 */
-    if (_sector_header_read(sector_idx, &current_header) == 0) {
-        /* 扇区头已存在，使用状态表机制更新状态 */
-        uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
-        uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
+    // /* 尝试读取当前扇区头 */
+    // if (_sector_header_read(sector_idx, &current_header) == 0) {
+    //     /* 扇区头已存在，使用状态表机制更新状态 */
+    //     uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
+    //     uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
         
-        /* 更新状态（如果需要） */
-        if (m_sector_desc_list[sector_idx].attr.status != status) {
-            result = _write_status(addr, status_table, SECTOR_STATUS_NUM, status);
-            if (result != FLASH_NO_ERR) {
-                EFLASH_ASSERT(0);
-                return -1;
-            }
-            m_sector_desc_list[sector_idx].attr.status = status;
-        }
+    //     /* 更新状态（如果需要） */
+    //     if (m_sector_desc_list[sector_idx].attr.status != status) {
+    //         result = _write_status(addr, status_table, SECTOR_STATUS_NUM, status);
+    //         if (result != FLASH_NO_ERR) {
+    //             EFLASH_ASSERT(0);
+    //             return -1;
+    //         }
+    //         m_sector_desc_list[sector_idx].attr.status = status;
+    //     }
         
-        /* 更新角色（如果需要） */
-        if (m_sector_desc_list[sector_idx].attr.role != role) {
-            result = _write_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM, role);
-            if (result != FLASH_NO_ERR) {
-                EFLASH_ASSERT(0);
-                return -1;
-            }
-            m_sector_desc_list[sector_idx].attr.role = role;
-        }
+    //     /* 更新角色（如果需要） */
+    //     if (m_sector_desc_list[sector_idx].attr.role != role) {
+    //         result = _write_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM, role);
+    //         if (result != FLASH_NO_ERR) {
+    //             EFLASH_ASSERT(0);
+    //             return -1;
+    //         }
+    //         m_sector_desc_list[sector_idx].attr.role = role;
+    //     }
         
-        return 0;
-    } else {
+    //     return 0;
+    // } else {
         /* 扇区头不存在（擦除后第一次写入），创建新的扇区头 */
         sector_header_t header;
         memset(&header, 0xFF, sizeof(sector_header_t));
@@ -1646,12 +1735,12 @@ static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role
         
         /* 写入完整扇区头 */
         result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
-        if (result == FLASH_NO_ERR) {
+        // if (result == FLASH_NO_ERR) {
             m_sector_desc_list[sector_idx].attr.status = status;
             m_sector_desc_list[sector_idx].attr.role = role;
-            return 0;
-        }
-    }
+             return 0;
+        // }
+    // }
     
     EFLASH_ASSERT(0);
     return -1;
@@ -1714,6 +1803,8 @@ static embedded_flash_status_t embedded_flash_get_status(void)
 
 	return status; // 兜底
 }
+
+
 
 // ==================== 扇区擦除统计API实现 ====================
 #if EFLASH_ENABLE_ERASE_COUNTER

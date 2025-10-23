@@ -31,13 +31,13 @@
 #define KV_MAX_VALUE_SIZE  (10)
 // #define sizeof(KV_Record) (KV_MAX_VALUE_SIZE + 6)// 4字节对齐，sizeof(KV_Record): magic(1) + flags(1) + key(1) + value_length(1) + value(n) + crc(2)
 // 扇区信息常量定义
-#define KV_SECTOR_START_ADDR   (0x08060000)// 调整到Flash末尾区域，避免与APP冲突
+#define KV_SECTOR_START_ADDR   (0x0801E000)// 调整到Flash末尾区域，避免与APP冲突
 #define KV_SECTOR_SIZE     (FLASH_PAGE_SIZE)
 #define KV_GC_SECTOR_COUNT    (1) //GC区数量(固定值不可更改)
 #define KV_DATA_SECTOR_COUNT    (KV_SECTOR_COUNT-KV_GC_SECTOR_COUNT) //数据区计数
 #define KV_SECTOR_COUNT    (4) //必须大于等于2且你的掉电数据小于数据区大小
 // 扇区头信息常量定义
-#define SECTOR_HEADER_MAGIC_WORD    (0x30344645)  // 扇区头魔术字 ('E','F','4','0')
+#define SECTOR_HEADER_MAGIC_WORD    (0xA55A1234)  // 扇区头魔术字 
 
 // 状态表大小计算（基于写入粒度）
 #if (EFLASH_WRITE_GRAN == 1)
@@ -145,9 +145,9 @@ typedef enum {
 //扇区角色（使用索引值，对应状态表位置）
 typedef enum {  
     EFLASH_SECTOR_ROLE_UNASSIGNED = 0,   // 未分配（初始状态，全FF）
-    EFLASH_SECTOR_ROLE_DATA = 1,         // 数据区
+    EFLASH_SECTOR_ROLE_GC = 1,           // GC区
     EFLASH_SECTOR_ROLE_GC_TEMP = 2,      // 临时GC区（迁移过程中）
-    EFLASH_SECTOR_ROLE_GC = 3,           // GC区
+    EFLASH_SECTOR_ROLE_DATA = 3,         // 数据区
     EFLASH_SECTOR_ROLE_DATA_GCING = 4,   // 被gc的数据区
 } EmbeddedFlash_sector_role_e;
 
@@ -220,30 +220,6 @@ typedef struct {
 } sector_desc_t;
 
 
-// 获取数据类型的固定长度
-static uint8_t embedded_flash_get_type_size(uint8_t data_type) {
-    switch (data_type) {
-        case EFLASH_FORMAT_BOOL:
-        case EFLASH_FORMAT_UINT8:
-        case EFLASH_FORMAT_INT8:
-            return 1;
-        case EFLASH_FORMAT_UINT16:
-        case EFLASH_FORMAT_INT16:
-            return 2;
-        case EFLASH_FORMAT_FLOAT:
-        case EFLASH_FORMAT_UINT32:
-        case EFLASH_FORMAT_INT32:
-            return 4;
-        case EFLASH_FORMAT_UINT64:
-        case EFLASH_FORMAT_INT64:
-            return 8;
-        case EFLASH_FORMAT_STRING:
-        case EFLASH_FORMAT_HEX:
-            return 0; // 可变长度，需要用户指定
-        default:
-            return 0;
-    }
-}
 
 // 扇区擦除统计结构体
 #if EFLASH_ENABLE_ERASE_COUNTER
@@ -257,6 +233,9 @@ typedef struct {
 
 // 函数接口
 int embedded_flash_init(const kv_data_t *defaults, uint8_t default_count);
+
+// 获取数据类型的固定长度
+uint8_t embedded_flash_get_type_size(uint8_t data_type);
 
 // 固定长度数据类型的设置函数
 int embedded_flash_set_bool(uint8_t key, bool value);

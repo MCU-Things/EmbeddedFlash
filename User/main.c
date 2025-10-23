@@ -26,27 +26,27 @@ int main()
 	USART1_Init(115200);
 	
 	printf("main\r\n");
-	
-	// Flash接口测试示例
-	printf("\n========== Flash Port Test Example ==========\n");
-	uint32_t test_addr = 0x0807E000; // 使用Flash末尾区域进行测试
-	printf("Testing Flash port at address: 0x%08X\n", test_addr);
-	
-	// 初始化Flash
-	flash_port_init();
-	
-	// 执行Flash Port测试
-	if (flash_port_test(test_addr) == FLASH_NO_ERR) {
-		printf("✅ Flash port test passed!\n");
-	} else {
-		printf("❌ Flash port test failed!\n");
-	}
-	
-	printf("========== Flash Test Complete ==========\n\n");
+//	
+//	// Flash接口测试示例
+//	printf("\n========== Flash Port Test Example ==========\n");
+//	uint32_t test_addr = 0x0807E000; // 使用Flash末尾区域进行测试
+//	printf("Testing Flash port at address: 0x%08X\n", test_addr);
+//	
+//	// 初始化Flash
+//	flash_port_init();
+//	
+//	// 执行Flash Port测试
+//	if (flash_port_test(test_addr) == FLASH_NO_ERR) {
+//		printf("✅ Flash port test passed!\n");
+//	} else {
+//		printf("❌ Flash port test failed!\n");
+//	}
+//	
+//	printf("========== Flash Test Complete ==========\n\n");
 	
 	#if EMBEDDED_FLASH_DEMO_ENABLE_TESTS
 	InitSysTick();
-	if (flash_port_erase(0x08060000, KV_SECTOR_SIZE*KV_SECTOR_COUNT) != FLASH_NO_ERR) {
+	if (flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE*KV_SECTOR_COUNT) != FLASH_NO_ERR) {
 
 			printf ("erase fail \n");
 	}
