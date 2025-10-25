@@ -235,7 +235,7 @@ typedef struct {
 int embedded_flash_init(const kv_data_t *defaults, uint8_t default_count);
 
 // 获取数据类型的固定长度
-uint8_t embedded_flash_get_type_size(uint8_t data_type);
+uint8_t embedded_flash_get_type_size(EmbeddedFlash_data_type_e data_type);
 
 // 固定长度数据类型的设置函数
 int embedded_flash_set_bool(uint8_t key, bool value);
