@@ -21,20 +21,31 @@
 #define FLASH_END_ADDR              (0x0807FFFFU)             /* Flash结束地址 (512KB) */
 #define FLASH_SIZE                  (512 * 1024)            /* 512KB */
 
-/* 错误码定义 */
+/* 错误码定义（统一以 EF_ 前缀命名） */
 typedef enum {
-    FLASH_NO_ERR = 0,
-    FLASH_ERASE_ERR,
-    FLASH_WRITE_ERR,
-    FLASH_READ_ERR,
-    FLASH_PARAM_ERR
-} FlashErrCode;
+    EF_OK = 0,                 /* 成功 */
+    EF_ERR_PARAM,              /* 参数非法 */
+    EF_ERR_ADDR_RANGE,         /* 地址越界 */
+    EF_ERR_ADDR_ALIGN,         /* 地址未按要求对齐 */
+    EF_ERR_SIZE_ZERO,          /* 大小为0 */
+    EF_ERR_SIZE_ALIGN,         /* 大小未按要求对齐 */
+    EF_ERR_LOCKED,             /* Flash处于锁定状态 */
+    EF_ERR_BUSY,               /* Flash忙 */
+    EF_ERR_TIMEOUT,            /* 操作超时 */
+    EF_ERR_PROTECTION,         /* 写保护/选项字限制 */
+    EF_ERR_ERASE,              /* 擦除失败 */
+    EF_ERR_WRITE,              /* 写入失败 */
+    EF_ERR_READ,               /* 读取失败 */
+    EF_ERR_VERIFY,             /* 写后校验失败 */
+    EF_ERR,                    /* 通用错误（未归类时返回） */
+    EF_ERR_UNKNOWN             /* 未知错误 */
+} EF_ErrCode;
 
 /**
  * @brief Flash硬件初始化
  * @return 错误码
  */
-FlashErrCode flash_port_init(void);
+EF_ErrCode flash_port_init(void);
 
 /**
  * @brief 从Flash读取数据
@@ -45,7 +56,7 @@ FlashErrCode flash_port_init(void);
  * @param size 读取字节数
  * @return 错误码
  */
-FlashErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size);
+EF_ErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size);
 
 /**
  * @brief 擦除Flash数据
@@ -56,7 +67,7 @@ FlashErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size);
  * @param size 擦除字节数
  * @return 错误码
  */
-FlashErrCode flash_port_erase(uint32_t addr, size_t size);
+EF_ErrCode flash_port_erase(uint32_t addr, size_t size);
 
 /**
  * @brief 写入数据到Flash
@@ -68,7 +79,7 @@ FlashErrCode flash_port_erase(uint32_t addr, size_t size);
  * @param size 写入字节数（必须4字节对齐）
  * @return 错误码
  */
-FlashErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size);
+EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size);
 
 /**
  * @brief Flash环境锁定（关闭中断）
@@ -85,7 +96,7 @@ void flash_port_unlock(void);
  * @param test_addr 测试地址
  * @return 错误码
  */
-FlashErrCode flash_port_test(uint32_t test_addr);
+EF_ErrCode flash_port_test(uint32_t test_addr);
 
 
 #endif /* __EMBEDDED_FLASH_PORT_H__ */

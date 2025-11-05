@@ -36,7 +36,7 @@ int main()
 //	flash_port_init();
 //	
 //	// 执行Flash Port测试
-//	if (flash_port_test(test_addr) == FLASH_NO_ERR) {
+//	if (flash_port_test(test_addr) == EF_OK) {
 //		printf("✅ Flash port test passed!\n");
 //	} else {
 //		printf("❌ Flash port test failed!\n");
@@ -46,7 +46,7 @@ int main()
 	
 	#if EMBEDDED_FLASH_DEMO_ENABLE_TESTS
 	InitSysTick();
-	if (flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE*KV_SECTOR_COUNT) != FLASH_NO_ERR) {
+	if (flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE*KV_SECTOR_COUNT) != EF_OK) {
 
 			printf ("erase fail \n");
 	}
