@@ -37,7 +37,7 @@
 #define KV_DATA_SECTOR_COUNT    (KV_SECTOR_COUNT-KV_GC_SECTOR_COUNT) //数据区计数
 #define KV_SECTOR_COUNT    (4) //必须大于等于2且你的掉电数据小于数据区大小
 // 扇区头信息常量定义
-#define SECTOR_HEADER_MAGIC_WORD    (0xA55A1234)  // 扇区头魔术字 
+#define SECTOR_HEADER_MAGIC_WORD    (0x4321A55A)  // 扇区头魔术字 
 
 // 状态表大小计算（基于写入粒度）
 #if (EFLASH_WRITE_GRAN == 1)
@@ -184,8 +184,8 @@ typedef struct {
 typedef struct {
     uint8_t status_table[KV_STATUS_TABLE_SIZE];  // 状态表（16字节，支持5种状态转换）
     uint8_t magic;                                // 0xA5（协议头）
-    uint8_t data_type;                            // 数据类型（1字节）
     uint8_t key;                                  // 键 (1B)
+    uint8_t data_type;                            // 数据类型（1字节）
     uint8_t value_length;                         // 值的长度 (1B),仅指value字段的实际数据长度
     uint8_t value[KV_MAX_VALUE_SIZE];             // 数据值
     uint16_t crc;                                 // CRC16 校验码，只校验key、value_length、value
@@ -195,7 +195,7 @@ typedef struct {
 typedef struct {
     uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];  // 状态表（12字节）
     uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];      // 角色表（16字节）
-    uint32_t magic;                                   // 魔术字 0x30344645
+    uint32_t magic;                                   // 魔术字 0x4321A55A
     uint32_t reserved;                                // 保留字段
 }sector_header_t;
 #pragma pack()

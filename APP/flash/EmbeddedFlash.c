@@ -8,6 +8,7 @@
 
 #include "EmbeddedFlash.h"
 #include "crc16_x25.h"
+#include <stdint.h>
 #include <string.h>
 
 // 全局变量
@@ -30,11 +31,22 @@ static eflash_erase_stats_t m_erase_stats = {
 };
 #endif
 
-// 内部函数声明
-static size_t _set_status(uint8_t status_table[], size_t status_num, size_t status_index);
-static size_t _get_status(uint8_t status_table[], size_t status_num);
-static FlashErrCode _write_status(uint32_t addr, uint8_t status_table[], size_t status_num, size_t status_index);
-static size_t _read_status(uint32_t addr, uint8_t status_table[], size_t total_num);
+
+// 类型安全的状态操作函数
+static FlashErrCode _write_kv_status(uint32_t addr, EmbeddedFlash_record_status_e status);
+static FlashErrCode _write_sector_status(uint32_t addr, EmbeddedFlash_sector_status_e status);
+static FlashErrCode _write_sector_role(uint32_t addr, EmbeddedFlash_sector_role_e role);
+static EmbeddedFlash_record_status_e _read_kv_status(uint32_t addr);
+static EmbeddedFlash_sector_status_e _read_sector_status(uint32_t addr);
+static EmbeddedFlash_sector_role_e _read_sector_role(uint32_t addr);
+
+// 类型安全的状态表操作函数
+static size_t _set_kv_status_table(uint8_t status_table[], EmbeddedFlash_record_status_e status);
+static size_t _set_sector_status_table(uint8_t status_table[], EmbeddedFlash_sector_status_e status);
+static size_t _set_sector_role_table(uint8_t role_table[], EmbeddedFlash_sector_role_e role);
+static EmbeddedFlash_record_status_e _get_kv_status_from_table(uint8_t status_table[]);
+static EmbeddedFlash_sector_status_e _get_sector_status_from_table(uint8_t status_table[]);
+static EmbeddedFlash_sector_role_e _get_sector_role_from_table(uint8_t role_table[]);
 
 //初始化有关函数
 static int _startup_rebuild_sector(void);
@@ -57,10 +69,10 @@ static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p
 //头信息有关函数
 static bool _is_sector_header(const sector_header_t *header);
 static int _sector_header_read(uint8_t sector_idx, sector_header_t *header);
-static int _sector_header_status_compare(uint8_t sector_idx, uint8_t status);
-static int _sector_header_role_compare(uint8_t sector_idx, uint8_t role);
-static int _sector_header_status_write(uint8_t sector_idx, uint8_t status);
-static int _sector_header_role_write(uint8_t sector_idx, uint8_t role);
+// static int _sector_header_status_compare(uint8_t sector_idx, uint8_t status);
+// static int _sector_header_role_compare(uint8_t sector_idx, uint8_t role);
+// static int _sector_header_status_write(uint8_t sector_idx, uint8_t status);
+// static int _sector_header_role_write(uint8_t sector_idx, uint8_t role);
 
 static int _sector_header_compare(uint8_t sector_idx, uint8_t status, uint8_t role);
 static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role);
@@ -72,103 +84,6 @@ static int _execute_gc_operation(int gc_temp_sector_idx, int data_sector_idx, ui
 
 // 状态查询接口
 static embedded_flash_status_t embedded_flash_get_status(void);
-
-// ==================== 状态表操作函数实现 ====================
-/**
- * @brief 设置状态表
- * @param status_table 状态表缓冲区
- * @param status_num 状态总数
- * @param status_index 当前状态索引
- * @return 写入的字节索引
- */
-static size_t _set_status(uint8_t status_table[], size_t status_num, size_t status_index)
-{
-    size_t byte_index = ~0UL;
-    
-    /* 初始化状态表为全FF */
-    memset(status_table, 0xFF, STATUS_TABLE_SIZE(status_num));
-    
-    if (status_index > 0) {
-        /* 对于32位写入粒度，每个状态占用4字节 */
-        byte_index = (status_index - 1) * (EFLASH_WRITE_GRAN / 8);
-        status_table[byte_index] = 0x00;  /* 将对应位置设为0x00 */
-    }
-    
-    return byte_index;
-}
-
-/**
- * @brief 获取当前状态
- * @param status_table 状态表缓冲区
- * @param status_num 状态总数
- * @return 当前状态索引
- */
-static size_t _get_status(uint8_t status_table[], size_t status_num)
-{
-    size_t i;
-    
-    /* 从前往后查找第一个0x00的位置 */
-    for (i = 0; i < status_num; i++) {
-        if (status_table[i * EFLASH_WRITE_GRAN / 8] == 0x00) {
-            return i;  /* 找到第一个0x00，返回对应状态索引 */
-        }
-    }
-    
-    return 0;  /* 全FF，返回状态0 */
-}
-
-/**
- * @brief 写入状态到Flash（优化版：只写入需要改变的区域）
- * @param addr 写入地址
- * @param status_table 状态表缓冲区
- * @param status_num 状态总数
- * @param status_index 目标状态索引
- * @return 错误码
- */
-static FlashErrCode _write_status(uint32_t addr, uint8_t status_table[], size_t status_num, size_t status_index)
-{
-    uint8_t last_status = _read_status(addr, status_table, status_num);
-    if(last_status == status_index){
-        return FLASH_NO_ERR;
-    }
-    if (last_status > status_index) {
-        printf("Invalid status index: last_status=%d, status_index=%d\n", last_status, status_index);
-        return FLASH_PARAM_ERR;
-    }
-    FlashErrCode result = FLASH_NO_ERR;
-    size_t byte_index;
-    
-    /* 设置状态 */
-    byte_index = _set_status(status_table, status_num, status_index);
-    
-    /* status0（全FF）无需写入Flash */
-    if (byte_index == ~0UL) {
-        return FLASH_NO_ERR;
-    }
-    
-    /* 写入4字节（32位）到对应偏移 */
-    result = flash_port_write(addr + byte_index, (uint32_t *)&status_table[byte_index], EFLASH_WRITE_GRAN / 8);
-    
-    return result;
-}
-
-/**
- * @brief 从Flash读取状态
- * @param addr 读取地址
- * @param status_table 状态表缓冲区
- * @param total_num 状态总数
- * @return 当前状态索引
- */
-static size_t _read_status(uint32_t addr, uint8_t status_table[], size_t total_num)
-{
-    flash_port_read(addr, (uint32_t *)status_table, STATUS_TABLE_SIZE(total_num));
-    return _get_status(status_table, total_num);
-}
-
-/*==============================================================================
- * KV记录状态表辅助函数（用于实现分阶段提交）
- *============================================================================*/
-
 
 
 
@@ -187,13 +102,13 @@ static FlashErrCode _kv_delete_record(uint32_t addr)
     uint8_t status_table[KV_STATUS_TABLE_SIZE];
     
     /* 阶段1：标记为"预删除" */
-    result = _write_status(addr, status_table, KV_STATUS_NUM, EFLASH_KV_PRE_DELETE);
+    result = _write_kv_status(addr, EFLASH_KV_PRE_DELETE);
     if (result != FLASH_NO_ERR) {
         return result;
     }
     
     /* 阶段2：标记为"已删除" */
-    result = _write_status(addr, status_table, KV_STATUS_NUM, EFLASH_KV_DELETED);
+    result = _write_kv_status(addr, EFLASH_KV_DELETED);
     
     return result;
 }
@@ -211,13 +126,13 @@ static FlashErrCode _kv_read_record(uint32_t addr, KV_Record *kv_record, Embedde
     uint8_t status_table[KV_STATUS_TABLE_SIZE];
     
     /* 读取完整记录 */
-    result = flash_port_read(addr, (uint32_t *)kv_record, sizeof(KV_Record));
+    result = flash_port_read(addr, (uint8_t *)kv_record, sizeof(KV_Record));
     if (result != FLASH_NO_ERR) {
         return result;
     }
     
     /* 解析状态 */
-    *status = (EmbeddedFlash_record_status_e)_get_status(kv_record->status_table, KV_STATUS_NUM);
+    *status = _get_kv_status_from_table(kv_record->status_table);
     
     return FLASH_NO_ERR;
 }
@@ -242,12 +157,12 @@ static FlashErrCode _kv_recovery_record(uint32_t addr, const KV_Record *kv_recor
     if (status == EFLASH_KV_PRE_WRITE) {
         /* 预写入状态：数据可能不完整，标记为已删除 */
         printf("EmbeddedFlash: Recovery KV record at 0x%08X from PRE_WRITE to DELETED\n", addr);
-        result = _write_status(addr, status_table, KV_STATUS_NUM, EFLASH_KV_DELETED);
+        result = _write_kv_status(addr, EFLASH_KV_DELETED);
     } 
     else if (status == EFLASH_KV_PRE_DELETE) {
         /* 预删除状态：完成删除操作 */
         printf("EmbeddedFlash: Recovery KV record at 0x%08X from PRE_DELETE to DELETED\n", addr);
-        result = _write_status(addr, status_table, KV_STATUS_NUM, EFLASH_KV_DELETED);
+        result = _write_kv_status(addr, EFLASH_KV_DELETED);
     }
     /* WRITE/DELETED/UNUSED状态无需恢复 */
     
@@ -487,16 +402,18 @@ static int embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length,
         // 固定长度类型
         if (length != expected_length) {
             printf("Invalid length for key=%d: expected=%d, got=%d\n", key, expected_length, length);
+            EFLASH_ASSERT(0);
             return -1;
         }
     } else {
         // 可变长度类型（STRING, HEX）
         if (length == 0 || length > KV_MAX_VALUE_SIZE) {
             printf("Invalid length for key=%d: length=%d (must be 1-%d for variable length types)\n", key, length, KV_MAX_VALUE_SIZE);
+            EFLASH_ASSERT(0);
             return -1;
         }
     }
-    //从flash将旧数据读出来，如果没变化就不写入
+    
     kv_data_t *p_kv_data = _find_kv_data(key);
     if(p_kv_data == NULL){
         printf("Key not found: %d\n", key);
@@ -507,7 +424,7 @@ static int embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length,
         return -1;
     }
     KV_Record record = {0};
-
+    //从flash将旧数据读出来，如果没变化就不写入
     if(_find_latest_record(p_kv_data, &record, &p_kv_data->addr_abs) != 0){
         return -1;
     }
@@ -520,6 +437,7 @@ static int embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length,
     */
     // 构造记录
     memset(&record, 0xFF, sizeof(KV_Record));  // 先全部初始化为0xFF
+	_set_kv_status_table(record.status_table, EFLASH_KV_PRE_WRITE);
     record.magic = KV_HEADER_MAGIC;
     record.data_type = data_type;
     record.key = key;
@@ -545,14 +463,12 @@ static int embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length,
         return -1;
     }
 
-    // 使用状态表机制将新记录标记为WRITE状态
-    uint8_t status_table[KV_STATUS_TABLE_SIZE];
-    if(_write_status(new_write_abs_addr, status_table, KV_STATUS_NUM, EFLASH_KV_WRITE) != FLASH_NO_ERR){
+    // 使用类型安全函数将新记录标记为WRITE状态
+    if(_write_kv_status(new_write_abs_addr, EFLASH_KV_WRITE) != FLASH_NO_ERR){
 		printf("write EFLASH_KV_WRITE fail\r\n");
         EFLASH_ASSERT(0);
         return -1;
     }
-	memcpy(record.status_table, status_table, KV_STATUS_TABLE_SIZE);
     //如果不相等，那么内部有大于2条数据记录，需要将旧记录设置为删除
     if(p_kv_data->addr_abs != new_write_abs_addr){
         //使用状态表机制删除旧记录
@@ -567,35 +483,44 @@ static int embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length,
     p_kv_data->value_length = record.value_length;
     p_kv_data->data_type = record.data_type;
     p_kv_data->data_source = KV_DATA_SOURCE_UPDATE_WRITE;//更新数据到掉电储存区
-	memcpy(p_kv_data->value, value, length);
+		memcpy(p_kv_data->value, value, length);
 
     //验证是否写入
     KV_Record verify_record = {0};
-    if (flash_port_read(new_write_abs_addr, (uint32_t*)&verify_record, sizeof(KV_Record)) == FLASH_NO_ERR) {
-        if(memcmp(&verify_record, &record, sizeof(KV_Record)) != 0){
+    if (flash_port_read(new_write_abs_addr, (uint8_t*)&verify_record, sizeof(KV_Record)) == FLASH_NO_ERR) {
+        // 检查记录的基本信息是否匹配
+        bool basic_match = (verify_record.magic == record.magic &&
+                           verify_record.data_type == record.data_type &&
+                           verify_record.key == record.key &&
+                           verify_record.value_length == record.value_length &&
+                           memcmp(verify_record.value, record.value, KV_MAX_VALUE_SIZE) == 0 &&
+                           verify_record.crc == record.crc);
+        
+        // 检查状态是否为WRITE
+        EmbeddedFlash_record_status_e read_status = _get_kv_status_from_table(verify_record.status_table);
+        bool status_match = (read_status == EFLASH_KV_WRITE);
+
+        if(!basic_match || !status_match){
             printf("VERIFY FAIL: key=%d, addr=0x%x\n", key,new_write_abs_addr);
-            printf("Expected record:\n");
-            printf("  magic=0x%02X, data_type=%d, key=%d, value_length=%d\n", 
-                   record.magic, record.data_type, record.key, record.value_length);
-            printf("  value: ");
-            for(int i=0; i<KV_MAX_VALUE_SIZE; i++) printf("%02X ", record.value[i]);
-            printf("\n  crc=0x%04X\n", record.crc);
+            printf("Basic match: %s, Status match: %s (status=%d)\n", 
+                   basic_match ? "PASS" : "FAIL", 
+                   status_match ? "PASS" : "FAIL", 
+                   read_status);
             
-            printf("Read back record:\n");
-            printf("  magic=0x%02X, data_type=%d, key=%d, value_length=%d\n", 
-                   verify_record.magic, verify_record.data_type, verify_record.key, verify_record.value_length);
-            printf("  value: ");
-            for(int i=0; i<KV_MAX_VALUE_SIZE; i++) printf("%02X ", verify_record.value[i]);
-            printf("\n  crc=0x%04X\n", verify_record.crc);
-            
-            printf("Differences:\n");
-            uint8_t *p1 = (uint8_t*)&record;
-            uint8_t *p2 = (uint8_t*)&verify_record;
-            for(int i=0; i<sizeof(KV_Record); i++) {
-                if(p1[i] != p2[i]) {
-                    printf("  offset %d: expected=0x%02X, actual=0x%02X, diff=0x%02X\n", 
-                           i, p1[i], p2[i], p1[i]^p2[i]);
-                }
+            if(!basic_match) {
+                printf("Expected record:\n");
+                printf("  magic=0x%02X, data_type=%d, key=%d, value_length=%d\n", 
+                       record.magic, record.data_type, record.key, record.value_length);
+                printf("  value: ");
+                for(int i=0; i<KV_MAX_VALUE_SIZE; i++) printf("%02X ", record.value[i]);
+                printf("\n  crc=0x%04X\n", record.crc);
+                
+                printf("Read back record:\n");
+                printf("  magic=0x%02X, data_type=%d, key=%d, value_length=%d\n", 
+                       verify_record.magic, verify_record.data_type, verify_record.key, verify_record.value_length);
+                printf("  value: ");
+                for(int i=0; i<KV_MAX_VALUE_SIZE; i++) printf("%02X ", verify_record.value[i]);
+                printf("\n  crc=0x%04X\n", verify_record.crc);
             }
             return -1;
         }
@@ -627,10 +552,7 @@ int embedded_flash_get(uint8_t key, uint8_t *value, uint8_t *length, uint8_t *da
     
     kv_data_t *p_kv_data = _find_kv_data(key);
     if(p_kv_data == NULL){
-        printf("Key not found: %d\n", key);
-        //写一个默认值进去
-        //todo...
-
+        printf("Key not found: %d\n", key);    
         return -1;
     }
     // printf("Getting data for key=%d, stored address=0x%x\n", key, p_kv_data->addr_abs);
@@ -756,7 +678,7 @@ static int embedded_flash_gc(void) {
             while (last_gc_temp_scan_addr + sizeof(KV_Record) < last_gc_temp_end_addr) {//使用《=还是《
                 
                 // 读取记录
-                if (flash_port_read(last_gc_temp_scan_addr, (uint32_t*)&temp_record, sizeof(KV_Record)) != FLASH_NO_ERR) {
+                if (flash_port_read(last_gc_temp_scan_addr, (uint8_t*)&temp_record, sizeof(KV_Record)) != FLASH_NO_ERR) {
                     //todo...
         
                     // data_sector_scan_addr += sizeof(KV_Record);
@@ -767,7 +689,7 @@ static int embedded_flash_gc(void) {
                 if (_is_kv_record(&temp_record)) {
                     last_gc_temp_record = temp_record;//更新最新有效记录
                      // 记录最后一条记录的地址
-                    uint8_t record_status = _get_status(last_gc_temp_record.status_table, KV_STATUS_NUM);
+                    uint8_t record_status = (uint8_t)_get_kv_status_from_table(last_gc_temp_record.status_table);
                     if(record_status == EFLASH_KV_PRE_WRITE){
                         gc_temp_resume_empty_addr_abs = last_gc_temp_scan_addr;
                     }else{
@@ -800,7 +722,7 @@ static int embedded_flash_gc(void) {
         
             while (last_data_gcing_scan_addr + sizeof(KV_Record) < last_data_gcing_end_addr) {//使用<=还是<
                 // 读取记录
-                if (flash_port_read(last_data_gcing_scan_addr, (uint32_t*)&temp_record, sizeof(KV_Record)) != FLASH_NO_ERR) {
+                if (flash_port_read(last_data_gcing_scan_addr, (uint8_t*)&temp_record, sizeof(KV_Record)) != FLASH_NO_ERR) {
                     //todo...
         
                     // data_sector_scan_addr += sizeof(KV_Record);
@@ -819,14 +741,13 @@ static int embedded_flash_gc(void) {
                               last_data_gcing_record.value_length) == 0
                     ){
                         //如果gc临时区最后一条数据是EFLASH_KV_PRE_WRITE，那么被gc数据区的当前记录一定是EFLASH_KV_WRITE，因为pre_write和write是成对出现的
-                        uint8_t gc_temp_status = _get_status(last_gc_temp_record.status_table, KV_STATUS_NUM);
-                        uint8_t data_gcing_status = _get_status(last_data_gcing_record.status_table, KV_STATUS_NUM);
+                        uint8_t gc_temp_status = (uint8_t)_get_kv_status_from_table(last_gc_temp_record.status_table);
+                        uint8_t data_gcing_status = (uint8_t)_get_kv_status_from_table(last_data_gcing_record.status_table);
                         
                         if(gc_temp_status == EFLASH_KV_PRE_WRITE
                            && data_gcing_status == EFLASH_KV_WRITE){
-                            //将gc临时区的数据置为有效（使用状态表机制）
-                            uint8_t status_table[KV_STATUS_TABLE_SIZE];
-                            if (_write_status(gc_temp_resume_empty_addr_abs, status_table, KV_STATUS_NUM, EFLASH_KV_WRITE) != FLASH_NO_ERR) {
+                            //将gc临时区的数据置为有效（使用类型安全函数）
+                            if (_write_kv_status(gc_temp_resume_empty_addr_abs, EFLASH_KV_WRITE) != FLASH_NO_ERR) {
                                 EFLASH_ASSERT(0);
                                 return -1;
                             }
@@ -1012,14 +933,14 @@ static int _refresh_sector_data(int sector_idx) {
     while (scan_addr + sizeof(KV_Record) < sector_end_addr) {//使用<=还是<
 		KV_Record record ={0};
 		// 读取完整记录
-		if (flash_port_read(scan_addr, (uint32_t*)&record, sizeof(KV_Record)) == FLASH_NO_ERR) {
+		if (flash_port_read(scan_addr, (uint8_t*)&record, sizeof(KV_Record)) == FLASH_NO_ERR) {
             // 检查记录基本有效性（magic、CRC等）
             if (_is_kv_record(&record)) {
                 // 查找对应的kv_data_t
                 kv_data_t *p_kv_data = _find_kv_data(record.key);
                 if (p_kv_data != NULL) {
                     // 跳过无效记录，但仍需要统计record_count
-                    uint8_t record_status = _get_status(record.status_table, KV_STATUS_NUM);
+                    uint8_t record_status = (uint8_t)_get_kv_status_from_table(record.status_table);
                     if (record_status == EFLASH_KV_DELETED
                     || record_status == EFLASH_KV_PRE_DELETE
                     || record_status == EFLASH_KV_PRE_WRITE) {
@@ -1092,7 +1013,7 @@ static int _startup_restore_kv_data(void) {
         if(_sector_header_read(j, &header) != 0) {
             continue;
         }
-        uint8_t role = _get_status(header.role_table, SECTOR_ROLE_NUM);
+        uint8_t role = (uint8_t)_get_sector_role_from_table(header.role_table);
         if(role == EFLASH_SECTOR_ROLE_GC
         || role == EFLASH_SECTOR_ROLE_GC_TEMP) {
             first_data_sector_pos = (j + 1) % KV_SECTOR_COUNT;
@@ -1122,9 +1043,9 @@ static int _startup_init_missing_defaults(void) {
     for (int i = 0; i < m_kv_data_list_count; i++) {
         if (mp_kv_list[i].data_source == KV_DATA_SOURCE_DEFAULT) {
             // 构造默认值记录
-            KV_Record record;
-            memset(&record, 0xFF, sizeof(KV_Record));  // 先初始化为0xFF
+            KV_Record record={0};
             record.magic = KV_HEADER_MAGIC;
+            _set_kv_status_table(record.status_table, EFLASH_KV_PRE_WRITE);
             record.data_type = mp_kv_list[i].data_type;
             record.key = mp_kv_list[i].key;
             record.value_length = mp_kv_list[i].value_length;
@@ -1141,20 +1062,25 @@ static int _startup_init_missing_defaults(void) {
             memcpy(record.value, mp_kv_list[i].value, mp_kv_list[i].value_length);
             // 计算CRC - 跳过status_table(16) + magic(1) + data_type(1)，从key开始
             record.crc = crc16_x25_calculate((uint8_t*)&record.key, 2 + KV_MAX_VALUE_SIZE);
+            
             // 写入记录（使用状态表机制）
             uint32_t write_addr_abs = 0;
             if (_write_record(&record, &write_addr_abs) != 0) {
                 return -1;
             }
-            // 使用状态表机制标记为WRITE
-            uint8_t status_table[KV_STATUS_TABLE_SIZE];
-            if(_write_status(write_addr_abs, status_table, KV_STATUS_NUM, EFLASH_KV_WRITE) != FLASH_NO_ERR){
+            
+            // 使用类型安全函数标记为WRITE状态
+            if(_write_kv_status(write_addr_abs, EFLASH_KV_WRITE) != FLASH_NO_ERR){
+                printf("Failed to set WRITE status for key=%d at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
                 EFLASH_ASSERT(0);
                 return -1;
             }
+            
             // 更新RAM中的状态
             mp_kv_list[i].addr_abs = write_addr_abs;
             mp_kv_list[i].data_source = KV_DATA_SOURCE_FIRST_WRITE;
+            
+            printf("Initialized default value for key=%d at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
         }
     }
     
@@ -1177,7 +1103,7 @@ static int _foreach_sector_record(int (*func)(KV_Record *record)) {
             uint32_t end_addr = m_sector_desc_list[i].sector_addr + KV_SECTOR_SIZE;
             while (scan_addr + sizeof(KV_Record) < end_addr) {//使用<=还是<
                 KV_Record temp_record = {0};
-                if (flash_port_read(scan_addr, (uint32_t*)&temp_record, sizeof(KV_Record)) == FLASH_NO_ERR) {
+                if (flash_port_read(scan_addr, (uint8_t*)&temp_record, sizeof(KV_Record)) == FLASH_NO_ERR) {
                     if (_is_kv_record(&temp_record)){
                         if(func != NULL){
                             if(func(&temp_record) == 0){
@@ -1201,7 +1127,7 @@ static int _foreach_sector_record(int (*func)(KV_Record *record)) {
  */
 static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t *addr) {
     uint32_t read_addr = p_kv_data->addr_abs;
-    if(flash_port_read(read_addr, (uint32_t*)record, sizeof(KV_Record)) != FLASH_NO_ERR){
+    if(flash_port_read(read_addr, (uint8_t*)record, sizeof(KV_Record)) != FLASH_NO_ERR){
         printf("Failed to read record at stored address=0x%x for key=%d\n", read_addr, p_kv_data->key);
         return -1;
     }
@@ -1260,7 +1186,7 @@ static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p
                          (KV_SECTOR_SIZE - sizeof(sector_header_t) - m_sector_desc_list[sector_idx].free_space);
     
     // 写入Flash
-    if (flash_port_write(write_addr, (uint32_t*)p, sizeof(KV_Record)) != FLASH_NO_ERR){
+    if (flash_port_write(write_addr, (uint8_t*)p, sizeof(KV_Record)) != FLASH_NO_ERR){
         EFLASH_ASSERT(0);
         return -1;
     }
@@ -1280,7 +1206,7 @@ static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p
     
     // 只有状态改变时才写入Flash
     if (m_sector_desc_list[sector_idx].attr.status != original_status) {
-        printf("original_status:%d, new_status:%d\n", original_status, m_sector_desc_list[sector_idx].attr.status);
+        printf("original_sector_status:%d, new_sector_status:%d\n", original_status, m_sector_desc_list[sector_idx].attr.status);
         if(_sector_header_write(sector_idx, m_sector_desc_list[sector_idx].attr.status, m_sector_desc_list[sector_idx].attr.role) != 0) {
             return -1;
         }
@@ -1349,7 +1275,7 @@ static bool _is_kv_record(const KV_Record *record) {
     // 关键修复：使用固定长度KV_MAX_VALUE_SIZE而不是实际数据长度
     uint16_t calc_crc = crc16_x25_calculate((uint8_t*)&record->key, 2 + KV_MAX_VALUE_SIZE);
     if (calc_crc != record->crc) {
-        uint8_t record_status = _get_status((uint8_t * )record->status_table, KV_STATUS_NUM);
+        uint8_t record_status = (uint8_t)_get_kv_status_from_table((uint8_t*)record->status_table);
         printf("_is_kv_record: CRC mismatch for key=%d, status:%d, value_length:%d, data_type:%d, calc_crc=0x%04X, stored_crc=0x%04X\n", 
                record->key, record_status, record->value_length, record->data_type, calc_crc, record->crc);
         return false;
@@ -1440,9 +1366,9 @@ static int _execute_gc_operation(int gc_temp_sector_idx, int data_gcing_sector_i
         // 读取记录
         memset(&record, 0, sizeof(KV_Record));
         printf("GC: Reading record at address=0x%08X, size=%d\n", data_sector_scan_addr, sizeof(KV_Record));
-        if (flash_port_read(data_sector_scan_addr, (uint32_t*)&record, sizeof(KV_Record)) == FLASH_NO_ERR) {
+        if (flash_port_read(data_sector_scan_addr, (uint8_t*)&record, sizeof(KV_Record)) == FLASH_NO_ERR) {
             // 调试：打印读取的记录信息
-            uint8_t record_status = _get_status(record.status_table, KV_STATUS_NUM);
+            uint8_t record_status = (uint8_t)_get_kv_status_from_table(record.status_table);
             printf("GC: Read record - magic=0x%02X, key=%d, status=%d, value_len=%d, data_type=%d, crc=0x%04X\n", 
                    record.magic, record.key, record_status, record.value_length, record.data_type, record.crc);
             
@@ -1465,9 +1391,8 @@ static int _execute_gc_operation(int gc_temp_sector_idx, int data_gcing_sector_i
                         return -1;
                     }
                     
-                    // 步骤2: 将新副本提交为WRITE状态（使用状态表机制）
-                    uint8_t status_table[KV_STATUS_TABLE_SIZE];
-                    if (_write_status(new_rec_addr, status_table, KV_STATUS_NUM, EFLASH_KV_WRITE) != FLASH_NO_ERR) {
+                    // 步骤2: 将新副本提交为WRITE状态（使用类型安全函数）
+                    if (_write_kv_status(new_rec_addr, EFLASH_KV_WRITE) != FLASH_NO_ERR) {
                         EFLASH_ASSERT(0);
                         return -1;
                     }
@@ -1573,14 +1498,14 @@ static int _sector_header_read(uint8_t sector_idx, sector_header_t *header) {
         uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
         
         /* 读取扇区头 */
-        if (flash_port_read(addr, (uint32_t*)header, sizeof(sector_header_t)) == FLASH_NO_ERR) {
+        if (flash_port_read(addr, (uint8_t*)header, sizeof(sector_header_t)) == FLASH_NO_ERR) {
             if (!_is_sector_header(header)) {
                 return -1;
             }
             
             /* 解析状态表，更新RAM中的attr */
-            m_sector_desc_list[sector_idx].attr.status = _get_status(header->status_table, SECTOR_STATUS_NUM);
-            m_sector_desc_list[sector_idx].attr.role = _get_status(header->role_table, SECTOR_ROLE_NUM);
+            m_sector_desc_list[sector_idx].attr.status = (uint8_t)_get_sector_status_from_table(header->status_table);
+            m_sector_desc_list[sector_idx].attr.role = (uint8_t)_get_sector_role_from_table(header->role_table);
             
             return 0;
         }
@@ -1588,47 +1513,47 @@ static int _sector_header_read(uint8_t sector_idx, sector_header_t *header) {
     return -1;
 }
 
-/**
- * @brief 比较扇区头的状态信息
- * @param sector_idx 扇区索引
- * @param status 待比较的状态
- * @return 0=相同, -1=读取失败, -2=状态不同
- */
-static int _sector_header_status_compare(uint8_t sector_idx, uint8_t status)
-{
-    sector_header_t current_header = {0};
-    /* 尝试读取当前扇区头 */
-    if (_sector_header_read(sector_idx, &current_header) == 0) {
-        uint8_t current_status = _get_status(current_header.status_table, SECTOR_STATUS_NUM);
-        if (current_status != status) {
-            return -2;  // 状态不同
-        }
-        return 0;  // 状态相同
-    } else {
-        return -1;  // 读取失败或空扇区
-    }
-}
+// /**
+//  * @brief 比较扇区头的状态信息
+//  * @param sector_idx 扇区索引
+//  * @param status 待比较的状态
+//  * @return 0=相同, -1=读取失败, -2=状态不同
+//  */
+// static int _sector_header_status_compare(uint8_t sector_idx, uint8_t status)
+// {
+//     sector_header_t current_header = {0};
+//     /* 尝试读取当前扇区头 */
+//     if (_sector_header_read(sector_idx, &current_header) == 0) {
+//         uint8_t current_status = _get_status(current_header.status_table, SECTOR_STATUS_NUM);
+//         if (current_status != status) {
+//             return -2;  // 状态不同
+//         }
+//         return 0;  // 状态相同
+//     } else {
+//         return -1;  // 读取失败或空扇区
+//     }
+// }
 
-/**
- * @brief 比较扇区头的角色信息
- * @param sector_idx 扇区索引
- * @param role 待比较的角色
- * @return 0=相同, -1=读取失败, -3=角色不同
- */
-static int _sector_header_role_compare(uint8_t sector_idx, uint8_t role)
-{
-    sector_header_t current_header = {0};
-    /* 尝试读取当前扇区头 */
-    if (_sector_header_read(sector_idx, &current_header) == 0) {
-        uint8_t current_role = _get_status(current_header.role_table, SECTOR_ROLE_NUM);
-        if (current_role != role) {
-            return -3;  // 角色不同
-        }
-        return 0;  // 角色相同
-    } else {
-        return -1;  // 读取失败或空扇区
-    }
-}
+// /**
+//  * @brief 比较扇区头的角色信息
+//  * @param sector_idx 扇区索引
+//  * @param role 待比较的角色
+//  * @return 0=相同, -1=读取失败, -3=角色不同
+//  */
+// static int _sector_header_role_compare(uint8_t sector_idx, uint8_t role)
+// {
+//     sector_header_t current_header = {0};
+//     /* 尝试读取当前扇区头 */
+//     if (_sector_header_read(sector_idx, &current_header) == 0) {
+//         uint8_t current_role = _get_status(current_header.role_table, SECTOR_ROLE_NUM);
+//         if (current_role != role) {
+//             return -3;  // 角色不同
+//         }
+//         return 0;  // 角色相同
+//     } else {
+//         return -1;  // 读取失败或空扇区
+//     }
+// }
 
 /**
  * @brief 扇区信息比对（同时比较状态和角色）
@@ -1642,8 +1567,8 @@ static int _sector_header_compare(uint8_t sector_idx, uint8_t status, uint8_t ro
     sector_header_t current_header = {0};
     /* 尝试读取当前扇区头 */
     if (_sector_header_read(sector_idx, &current_header) == 0) {
-        uint8_t current_status = _get_status(current_header.status_table, SECTOR_STATUS_NUM);
-        uint8_t current_role = _get_status(current_header.role_table, SECTOR_ROLE_NUM);
+        uint8_t current_status = (uint8_t)_get_sector_status_from_table(current_header.status_table);
+        uint8_t current_role = (uint8_t)_get_sector_role_from_table(current_header.role_table);
         if(current_status != status && current_role != role) {
             return -4;
         }
@@ -1660,117 +1585,117 @@ static int _sector_header_compare(uint8_t sector_idx, uint8_t status, uint8_t ro
     }
 }
 
-/**
- * @brief 写入扇区头的状态信息
- * @param sector_idx 扇区索引
- * @param status 扇区状态
- * @return 0=成功, -1=失败
- * @note 如果扇区头不存在，会先创建完整的扇区头（使用当前RAM中的role）
- */
-static int _sector_header_status_write(uint8_t sector_idx, uint8_t status)
-{
-    FlashErrCode result = FLASH_NO_ERR;
+// /**
+//  * @brief 写入扇区头的状态信息
+//  * @param sector_idx 扇区索引
+//  * @param status 扇区状态
+//  * @return 0=成功, -1=失败
+//  * @note 如果扇区头不存在，会先创建完整的扇区头（使用当前RAM中的role）
+//  */
+// static int _sector_header_status_write(uint8_t sector_idx, uint8_t status)
+// {
+//     FlashErrCode result = FLASH_NO_ERR;
     
-    if (sector_idx >= KV_SECTOR_COUNT) {
-        return -1;
-    }
+//     if (sector_idx >= KV_SECTOR_COUNT) {
+//         return -1;
+//     }
 
-    uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
-    sector_header_t current_header = {0};
+//     uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
+//     sector_header_t current_header = {0};
     
-    /* 尝试读取当前扇区头 */
-    if (_sector_header_read(sector_idx, &current_header) == 0) {
-        /* 扇区头已存在，使用状态表机制更新状态 */
-        uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
+//     /* 尝试读取当前扇区头 */
+//     if (_sector_header_read(sector_idx, &current_header) == 0) {
+//         /* 扇区头已存在，使用状态表机制更新状态 */
+//         uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
         
-        /* 更新状态 */
-        result = _write_status(addr, status_table, SECTOR_STATUS_NUM, status);
-        if (result != FLASH_NO_ERR) {
-            EFLASH_ASSERT(0);
-            return -1;
-        }
-        m_sector_desc_list[sector_idx].attr.status = status;
-        return 0;
-    } else {
-        /* 扇区头不存在，创建新的扇区头（使用RAM中的role） */
-        sector_header_t header;
-        memset(&header, 0xFF, sizeof(sector_header_t));
+//         /* 更新状态 */
+//         result = _write_status(addr, status_table, SECTOR_STATUS_NUM, status);
+//         if (result != FLASH_NO_ERR) {
+//             EFLASH_ASSERT(0);
+//             return -1;
+//         }
+//         m_sector_desc_list[sector_idx].attr.status = status;
+//         return 0;
+//     } else {
+//         /* 扇区头不存在，创建新的扇区头（使用RAM中的role） */
+//         sector_header_t header;
+//         memset(&header, 0xFF, sizeof(sector_header_t));
         
-        /* 设置状态表和角色表 */
-        _set_status(header.status_table, SECTOR_STATUS_NUM, status);
-        _set_status(header.role_table, SECTOR_ROLE_NUM, m_sector_desc_list[sector_idx].attr.role);
+//         /* 设置状态表和角色表 */
+//         _set_status(header.status_table, SECTOR_STATUS_NUM, status);
+//         _set_status(header.role_table, SECTOR_ROLE_NUM, m_sector_desc_list[sector_idx].attr.role);
         
-        /* 设置魔术字 */
-        header.magic = SECTOR_HEADER_MAGIC_WORD;
-        header.reserved = 0xFFFFFFFF;
+//         /* 设置魔术字 */
+//         header.magic = SECTOR_HEADER_MAGIC_WORD;
+//         header.reserved = 0xFFFFFFFF;
         
-        /* 写入完整扇区头 */
-        result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
-        if (result == FLASH_NO_ERR) {
-            m_sector_desc_list[sector_idx].attr.status = status;
-            return 0;
-        }
-    }
+//         /* 写入完整扇区头 */
+//         result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
+//         if (result == FLASH_NO_ERR) {
+//             m_sector_desc_list[sector_idx].attr.status = status;
+//             return 0;
+//         }
+//     }
     
-    EFLASH_ASSERT(0);
-    return -1;
-}
+//     EFLASH_ASSERT(0);
+//     return -1;
+// }
 
-/**
- * @brief 写入扇区头的角色信息
- * @param sector_idx 扇区索引
- * @param role 扇区角色
- * @return 0=成功, -1=失败
- * @note 如果扇区头不存在，会先创建完整的扇区头（使用当前RAM中的status）
- */
-static int _sector_header_role_write(uint8_t sector_idx, uint8_t role)
-{
-    FlashErrCode result = FLASH_NO_ERR;
+// /**
+//  * @brief 写入扇区头的角色信息
+//  * @param sector_idx 扇区索引
+//  * @param role 扇区角色
+//  * @return 0=成功, -1=失败
+//  * @note 如果扇区头不存在，会先创建完整的扇区头（使用当前RAM中的status）
+//  */
+// static int _sector_header_role_write(uint8_t sector_idx, uint8_t role)
+// {
+//     FlashErrCode result = FLASH_NO_ERR;
     
-    if (sector_idx >= KV_SECTOR_COUNT) {
-        return -1;
-    }
+//     if (sector_idx >= KV_SECTOR_COUNT) {
+//         return -1;
+//     }
 
-    uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
-    sector_header_t current_header = {0};
+//     uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
+//     sector_header_t current_header = {0};
     
-    /* 尝试读取当前扇区头 */
-    if (_sector_header_read(sector_idx, &current_header) == 0) {
-        /* 扇区头已存在，使用状态表机制更新角色 */
-        uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
+//     /* 尝试读取当前扇区头 */
+//     if (_sector_header_read(sector_idx, &current_header) == 0) {
+//         /* 扇区头已存在，使用状态表机制更新角色 */
+//         uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
         
-        /* 更新角色 */
-        result = _write_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM, role);
-        if (result != FLASH_NO_ERR) {
-            EFLASH_ASSERT(0);
-            return -1;
-        }
-        m_sector_desc_list[sector_idx].attr.role = role;
-        return 0;
-    } else {
-        /* 扇区头不存在，创建新的扇区头（使用RAM中的status） */
-        sector_header_t header;
-        memset(&header, 0xFF, sizeof(sector_header_t));
+//         /* 更新角色 */
+//         result = _write_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM, role);
+//         if (result != FLASH_NO_ERR) {
+//             EFLASH_ASSERT(0);
+//             return -1;
+//         }
+//         m_sector_desc_list[sector_idx].attr.role = role;
+//         return 0;
+//     } else {
+//         /* 扇区头不存在，创建新的扇区头（使用RAM中的status） */
+//         sector_header_t header;
+//         memset(&header, 0xFF, sizeof(sector_header_t));
         
-        /* 设置状态表和角色表 */
-        _set_status(header.status_table, SECTOR_STATUS_NUM, m_sector_desc_list[sector_idx].attr.status);
-        _set_status(header.role_table, SECTOR_ROLE_NUM, role);
+//         /* 设置状态表和角色表 */
+//         _set_status(header.status_table, SECTOR_STATUS_NUM, m_sector_desc_list[sector_idx].attr.status);
+//         _set_status(header.role_table, SECTOR_ROLE_NUM, role);
         
-        /* 设置魔术字 */
-        header.magic = SECTOR_HEADER_MAGIC_WORD;
-        header.reserved = 0xFFFFFFFF;
+//         /* 设置魔术字 */
+//         header.magic = SECTOR_HEADER_MAGIC_WORD;
+//         header.reserved = 0xFFFFFFFF;
         
-        /* 写入完整扇区头 */
-        result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
-        if (result == FLASH_NO_ERR) {
-            m_sector_desc_list[sector_idx].attr.role = role;
-            return 0;
-        }
-    }
+//         /* 写入完整扇区头 */
+//         result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
+//         if (result == FLASH_NO_ERR) {
+//             m_sector_desc_list[sector_idx].attr.role = role;
+//             return 0;
+//         }
+//     }
     
-    EFLASH_ASSERT(0);
-    return -1;
-}
+//     EFLASH_ASSERT(0);
+//     return -1;
+// }
 
 /**
  * @brief 写入扇区头信息（同时写入状态和角色）
@@ -1788,56 +1713,52 @@ static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role
     }
 
     uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
-    // sector_header_t current_header = {0};
+    sector_header_t last_header = {0};
+    /* 尝试读取当前扇区头 */
+    if (_sector_header_read(sector_idx, &last_header) == 0) {
+        uint8_t last_status = (uint8_t)_get_sector_status_from_table(last_header.status_table);
+        if (last_status == status || last_status > status) {
+            printf("status:%d -> %d\r\n", last_status, status);
+        }else{
+            /* 扇区头已存在，使用类型安全函数更新状态 */
+            result = _write_sector_status(addr, (EmbeddedFlash_sector_status_e)status);
+            if (result != FLASH_NO_ERR) {
+                EFLASH_ASSERT(0);
+                return -1;
+            }
+            m_sector_desc_list[sector_idx].attr.status = status;
+        }
+        
     
-    // /* 尝试读取当前扇区头 */
-    // if (_sector_header_read(sector_idx, &current_header) == 0) {
-    //     /* 扇区头已存在，使用状态表机制更新状态 */
-    //     uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
-    //     uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
+        uint8_t last_role = (uint8_t)_get_sector_role_from_table(last_header.role_table);
+        if (last_role == role || last_role > role) {
+            printf("role:%d -> %d\r\n", last_role, role);
+        }else{
+            /* 扇区头已存在，使用类型安全函数更新角色 */
+            result = _write_sector_role(addr, (EmbeddedFlash_sector_role_e)role);
+            if (result != FLASH_NO_ERR) {
+                EFLASH_ASSERT(0);
+                return -1;
+            }
+            m_sector_desc_list[sector_idx].attr.role = role;
+        }
         
-    //     /* 更新状态（如果需要） */
-    //     if (m_sector_desc_list[sector_idx].attr.status != status) {
-    //         result = _write_status(addr, status_table, SECTOR_STATUS_NUM, status);
-    //         if (result != FLASH_NO_ERR) {
-    //             EFLASH_ASSERT(0);
-    //             return -1;
-    //         }
-    //         m_sector_desc_list[sector_idx].attr.status = status;
-    //     }
-        
-    //     /* 更新角色（如果需要） */
-    //     if (m_sector_desc_list[sector_idx].attr.role != role) {
-    //         result = _write_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM, role);
-    //         if (result != FLASH_NO_ERR) {
-    //             EFLASH_ASSERT(0);
-    //             return -1;
-    //         }
-    //         m_sector_desc_list[sector_idx].attr.role = role;
-    //     }
-        
-    //     return 0;
-    // } else {
+        return 0;
+    } else {
         /* 扇区头不存在（擦除后第一次写入），创建新的扇区头 */
-        sector_header_t header;
-        memset(&header, 0xFF, sizeof(sector_header_t));
-        
-        /* 设置状态表 */
-        _set_status(header.status_table, SECTOR_STATUS_NUM, status);
-        _set_status(header.role_table, SECTOR_ROLE_NUM, role);
-        
-        /* 设置魔术字 */
-        header.magic = SECTOR_HEADER_MAGIC_WORD;
-        header.reserved = 0xFFFFFFFF;
-        
-        /* 写入完整扇区头 */
-        result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
-        // if (result == FLASH_NO_ERR) {
+        sector_header_t new_header;
+        memset(&new_header, 0xFF, sizeof(sector_header_t));
+        _set_sector_status_table(new_header.status_table, (EmbeddedFlash_sector_status_e)status);
+        _set_sector_role_table(new_header.role_table, (EmbeddedFlash_sector_role_e)role);
+        new_header.magic = SECTOR_HEADER_MAGIC_WORD;
+        new_header.reserved = 0xFFFFFFFF;
+        result = flash_port_write(addr, (uint8_t*)&new_header, sizeof(sector_header_t));
+        if (result == FLASH_NO_ERR) {
             m_sector_desc_list[sector_idx].attr.status = status;
             m_sector_desc_list[sector_idx].attr.role = role;
-             return 0;
-        // }
-    // }
+            return 0;
+        }
+    }
     
     EFLASH_ASSERT(0);
     return -1;
@@ -1856,7 +1777,7 @@ static embedded_flash_status_t embedded_flash_get_status(void)
 		if (_sector_header_read(i, &header) != 0) {
 			empty_cnt++;
 		}else{
-            uint8_t role = _get_status(header.role_table, SECTOR_ROLE_NUM);
+            uint8_t role = (uint8_t)_get_sector_role_from_table(header.role_table);
             switch (role) {
                 case EFLASH_SECTOR_ROLE_GC:         gc_cnt++;           break;
                 case EFLASH_SECTOR_ROLE_GC_TEMP:    gc_temp_cnt++;      break;
@@ -2004,6 +1925,239 @@ void embedded_flash_print_erase_stats(void) {
 }
 
 #endif
+
+
+
+// ==================== 状态表操作函数实现 ====================
+/**
+ * @brief 设置状态表
+ * @param status_table 状态表缓冲区
+ * @param status_num 状态总数
+ * @param status_index 当前状态索引
+ * @return 写入的字节索引
+ */
+ static size_t _set_status(uint8_t status_table[], size_t status_num, size_t status_index)
+ {
+     size_t byte_index = ~0UL;
+     
+     /* 初始化状态表为全FF */
+    //  memset(status_table, 0xFF, STATUS_TABLE_SIZE(status_num));
+     
+     if (status_index > 0) {
+         /* 对于32位写入粒度，每个状态占用4字节 */
+         byte_index = (status_index - 1) * (EFLASH_WRITE_GRAN / 8);
+         status_table[byte_index] = 0x00;  /* 将对应位置设为0x00 */
+     }
+     
+     return byte_index;
+ }
+ 
+ /**
+  * @brief 获取当前状态
+  * @param status_table 状态表缓冲区
+  * @param status_num 状态总数
+  * @return 当前状态索引
+  */
+ static size_t _get_status(uint8_t status_table[], size_t status_num)
+ {
+     size_t i;
+     size_t highest_status = 0;
+     
+     /* 从前往后查找所有0x00的位置，返回最高的状态 */
+     for (i = 0; i < status_num; i++) {
+         if (status_table[i * EFLASH_WRITE_GRAN / 8] == 0x00) {
+             highest_status = i;  /* 记录找到的状态，继续查找更高的状态 */
+         }
+     }
+     
+     return highest_status;  /* 返回最高状态，如果全FF则返回0 */
+ }
+ /**
+* @brief 从Flash读取状态
+* @param addr 读取地址
+* @param status_table 状态表缓冲区
+* @param total_num 状态总数
+* @return 当前状态索引
+*/
+static size_t _read_status(uint32_t addr, uint8_t status_table[], size_t total_num)
+{
+		flash_port_read(addr, (uint8_t *)status_table, STATUS_TABLE_SIZE(total_num));
+		return _get_status(status_table, total_num);
+}
+
+/**
+* @brief 写入状态到Flash（优化版：只写入需要改变的区域）
+* @param addr 写入地址
+* @param status_table 状态表缓冲区
+* @param status_num 状态总数
+* @param status_index 目标状态索引
+* @return 错误码
+*/
+static FlashErrCode _write_status(uint32_t addr, uint8_t status_table[], size_t status_num, size_t status_index)
+{
+	//  memset(status_table, 0xFF, STATUS_TABLE_SIZE(status_num));
+	//  uint8_t last_status = _read_status(addr, status_table, status_num);
+	//  if(last_status == status_index){
+    //     return FLASH_NO_ERR;
+	//  }
+	//  if (last_status > status_index) {
+    //     printf("Invalid status index: last_status=%d, status_index=%d\n", last_status, status_index);
+    //     return FLASH_PARAM_ERR;
+	//  }
+	 FlashErrCode result = FLASH_NO_ERR;
+	 size_t byte_index;
+	 
+	 /* 设置状态 */
+	 byte_index = _set_status(status_table, status_num, status_index);
+	 
+	 /* status0（全FF）无需写入Flash */
+	 if (byte_index == ~0UL) {
+		 return FLASH_NO_ERR;
+	 }
+	 
+	 /* 写入4字节（32位）到对应偏移 */
+	 result = flash_port_write(addr + byte_index, (uint8_t *)&status_table[byte_index], EFLASH_WRITE_GRAN / 8);
+	 printf("addr:0x%x size:%d, status_index:%d\r\n", addr + byte_index, EFLASH_WRITE_GRAN / 8, status_index);
+	 for(uint8_t i=0; i<EFLASH_WRITE_GRAN / 8 ; i++){
+		 printf("data[%d]:0x%02X\r\n", i, status_table[byte_index + i]);
+	 }
+	 return result;
+}
+
+
+
+// ==================== 类型安全的状态操作函数实现 ====================
+
+/**
+ * @brief 写入KV记录状态（类型安全）
+ * @param addr KV记录地址
+ * @param status 记录状态
+ * @return 错误码
+ */
+ static FlashErrCode _write_kv_status(uint32_t addr, EmbeddedFlash_record_status_e status) {
+    printf("write kv status: %d\r\n", status);
+    uint8_t status_table[KV_STATUS_TABLE_SIZE];
+    memset(status_table, 0xFF, KV_STATUS_TABLE_SIZE);
+    return _write_status(addr, status_table, KV_STATUS_NUM, (size_t)status);
+}
+
+/**
+ * @brief 写入扇区状态（类型安全）
+ * @param addr 扇区头地址
+ * @param status 扇区状态
+ * @return 错误码
+ */
+static FlashErrCode _write_sector_status(uint32_t addr, EmbeddedFlash_sector_status_e status) {
+    printf("write sector status: %d\r\n", status);
+    uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
+    memset(status_table, 0xFF, SECTOR_STATUS_TABLE_SIZE);
+    return _write_status(addr, status_table, SECTOR_STATUS_NUM, (size_t)status);
+}
+
+/**
+ * @brief 写入扇区角色（类型安全）
+ * @param addr 扇区头地址 + 状态表偏移
+ * @param role 扇区角色
+ * @return 错误码
+ */
+static FlashErrCode _write_sector_role(uint32_t addr, EmbeddedFlash_sector_role_e role) {
+    printf("write sector role: %d\r\n", role);
+    uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
+    memset(role_table, 0xFF, SECTOR_ROLE_TABLE_SIZE);
+    return _write_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM, (size_t)role);
+}
+
+/**
+ * @brief 读取KV记录状态（类型安全）
+ * @param addr KV记录地址
+ * @return 记录状态
+ */
+static EmbeddedFlash_record_status_e _read_kv_status(uint32_t addr) {
+    uint8_t status_table[KV_STATUS_TABLE_SIZE];
+    size_t status = _read_status(addr, status_table, KV_STATUS_NUM);
+    return (EmbeddedFlash_record_status_e)status;
+}
+
+/**
+ * @brief 读取扇区状态（类型安全）
+ * @param addr 扇区头地址
+ * @return 扇区状态
+ */
+static EmbeddedFlash_sector_status_e _read_sector_status(uint32_t addr) {
+    uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
+    size_t status = _read_status(addr, status_table, SECTOR_STATUS_NUM);
+    return (EmbeddedFlash_sector_status_e)status;
+}
+
+/**
+ * @brief 读取扇区角色（类型安全）
+ * @param addr 扇区头地址 + 状态表偏移
+ * @return 扇区角色
+ */
+static EmbeddedFlash_sector_role_e _read_sector_role(uint32_t addr) {
+    uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
+    size_t role = _read_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM);
+    return (EmbeddedFlash_sector_role_e)role;
+}
+
+// ==================== 类型安全的状态表操作函数实现 ====================
+
+/**
+ * @brief 设置KV记录状态表（类型安全）
+ * @param status_table 状态表缓冲区
+ * @param status 记录状态
+ * @return 写入的字节索引
+ */
+static size_t _set_kv_status_table(uint8_t status_table[], EmbeddedFlash_record_status_e status) {
+    return _set_status(status_table, KV_STATUS_NUM, (size_t)status);
+}
+
+/**
+ * @brief 设置扇区状态表（类型安全）
+ * @param status_table 状态表缓冲区
+ * @param status 扇区状态
+ * @return 写入的字节索引
+ */
+static size_t _set_sector_status_table(uint8_t status_table[], EmbeddedFlash_sector_status_e status) {
+    return _set_status(status_table, SECTOR_STATUS_NUM, (size_t)status);
+}
+
+/**
+ * @brief 设置扇区角色表（类型安全）
+ * @param role_table 角色表缓冲区
+ * @param role 扇区角色
+ * @return 写入的字节索引
+ */
+static size_t _set_sector_role_table(uint8_t role_table[], EmbeddedFlash_sector_role_e role) {
+    return _set_status(role_table, SECTOR_ROLE_NUM, (size_t)role);
+}
+
+/**
+ * @brief 从状态表获取KV记录状态（类型安全）
+ * @param status_table 状态表缓冲区
+ * @return 记录状态
+ */
+static EmbeddedFlash_record_status_e _get_kv_status_from_table(uint8_t status_table[]) {
+    return (EmbeddedFlash_record_status_e)_get_status(status_table, KV_STATUS_NUM);
+}
+
+/**
+ * @brief 从状态表获取扇区状态（类型安全）
+ * @param status_table 状态表缓冲区
+ * @return 扇区状态
+ */
+static EmbeddedFlash_sector_status_e _get_sector_status_from_table(uint8_t status_table[]) {
+    return (EmbeddedFlash_sector_status_e)_get_status(status_table, SECTOR_STATUS_NUM);
+}
+
+/**
+ * @brief 从角色表获取扇区角色（类型安全）
+ * @param role_table 角色表缓冲区
+ * @return 扇区角色
+ */
+static EmbeddedFlash_sector_role_e _get_sector_role_from_table(uint8_t role_table[]) {
+    return (EmbeddedFlash_sector_role_e)_get_status(role_table, SECTOR_ROLE_NUM);
+}
 
 
 

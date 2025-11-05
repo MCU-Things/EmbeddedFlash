@@ -45,7 +45,7 @@ FlashErrCode flash_port_init(void);
  * @param size 读取字节数
  * @return 错误码
  */
-FlashErrCode flash_port_read(uint32_t addr, uint32_t *buf, size_t size);
+FlashErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size);
 
 /**
  * @brief 擦除Flash数据
@@ -60,15 +60,15 @@ FlashErrCode flash_port_erase(uint32_t addr, size_t size);
 
 /**
  * @brief 写入数据到Flash
- * @note 操作单位为字(32位)
+ * @note 操作单位为字节，内部按4字节对齐处理
  * @note 必须先擦除后写入
  * 
- * @param addr Flash地址
+ * @param addr Flash地址（必须4字节对齐）
  * @param buf 要写入的数据缓冲区
- * @param size 写入字节数
+ * @param size 写入字节数（必须4字节对齐）
  * @return 错误码
  */
-FlashErrCode flash_port_write(uint32_t addr, const uint32_t *buf, size_t size);
+FlashErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size);
 
 /**
  * @brief Flash环境锁定（关闭中断）
