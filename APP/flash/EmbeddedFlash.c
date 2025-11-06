@@ -32,15 +32,15 @@ static eflash_erase_stats_t m_erase_stats = {
 #endif
 
 
-// 类型安全的状态操作函数
-static EF_ErrCode _write_kv_status(uint32_t addr, EmbeddedFlash_record_status_e status);
-static EF_ErrCode _write_sector_status(uint32_t addr, EmbeddedFlash_sector_status_e status);
-static EF_ErrCode _write_sector_role(uint32_t addr, EmbeddedFlash_sector_role_e role);
-static EmbeddedFlash_record_status_e _read_kv_status(uint32_t addr);
-static EmbeddedFlash_sector_status_e _read_sector_status(uint32_t addr);
-static EmbeddedFlash_sector_role_e _read_sector_role(uint32_t addr);
+/* ==================== 静态函数前向声明 ==================== */
 
-// 类型安全的状态表操作函数
+/* --- 1. 状态表底层操作（最底层） --- */
+static size_t _set_status(uint8_t status_table[], size_t status_num, size_t status_index);
+static size_t _get_status(uint8_t status_table[], size_t status_num);
+static size_t _read_status(uint32_t addr, uint8_t status_table[], size_t total_num);
+static EF_ErrCode _write_status(uint32_t addr, uint8_t status_table[], size_t status_num, size_t status_index);
+
+/* --- 2. 类型安全的状态表操作（状态表的封装） --- */
 static size_t _set_kv_status_table(uint8_t status_table[], EmbeddedFlash_record_status_e status);
 static size_t _set_sector_status_table(uint8_t status_table[], EmbeddedFlash_sector_status_e status);
 static size_t _set_sector_role_table(uint8_t role_table[], EmbeddedFlash_sector_role_e role);
@@ -48,1444 +48,45 @@ static EmbeddedFlash_record_status_e _get_kv_status_from_table(uint8_t status_ta
 static EmbeddedFlash_sector_status_e _get_sector_status_from_table(uint8_t status_table[]);
 static EmbeddedFlash_sector_role_e _get_sector_role_from_table(uint8_t role_table[]);
 
-//初始化有关函数
-static int _startup_rebuild_sector(void);
-static void _startup_restore_sector_attr(void);
-static int _refresh_sector_data(int sector_idx);
-static int _startup_restore_kv_data(void);
-static int _startup_init_missing_defaults(void);
+/* ---  类型安全的状态操作（Flash读写封装） --- */
+static EF_ErrCode _write_kv_status(uint32_t addr, EmbeddedFlash_record_status_e status);
+static EF_ErrCode _write_sector_status(uint32_t addr, EmbeddedFlash_sector_status_e status);
+static EF_ErrCode _write_sector_role(uint32_t addr, EmbeddedFlash_sector_role_e role);
+static EmbeddedFlash_record_status_e _read_kv_status(uint32_t addr);
+static EmbeddedFlash_sector_status_e _read_sector_status(uint32_t addr);
+static EmbeddedFlash_sector_role_e _read_sector_role(uint32_t addr);
 
-static int _find_sector_role(uint8_t role);
-static int _find_writable_data_sector(uint16_t required_space);
-static int _erase_sector(uint8_t sector_idx);
-
-//kv数据有关函数
-static kv_data_t* _find_kv_data(uint8_t key);
-static bool _is_kv_record(const KV_Record *record);
-static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t *addr);
-static int _write_record(KV_Record *p, uint32_t *p_addr_abs);
-static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p_addr_abs);
-
-//头信息有关函数
-static bool _is_sector_header(const sector_header_t *header);
+/* ---  扇区管理 --- */
 static int _sector_header_read(uint8_t sector_idx, sector_header_t *header);
-// static int _sector_header_status_compare(uint8_t sector_idx, uint8_t status);
-// static int _sector_header_role_compare(uint8_t sector_idx, uint8_t role);
-// static int _sector_header_status_write(uint8_t sector_idx, uint8_t status);
-// static int _sector_header_role_write(uint8_t sector_idx, uint8_t role);
+static bool _is_sector_header(const sector_header_t *header);
+static int _find_sector_role(uint8_t role);
+static EF_ErrCode _erase_sector(uint8_t sector_idx);
+static EF_ErrCode _init_all_sector_attr(void);
+static embedded_flash_att_status_t embedded_flash_get_attr_status(void);
 
-static int _sector_header_compare(uint8_t sector_idx, uint8_t status, uint8_t role);
-static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role);
+/* ---  KV记录操作 --- */
+static EmbeddedFlash_record_status_e _is_kv_record(const KV_Record *record);
+static EF_ErrCode _kv_delete_record(uint32_t addr);
+static kv_data_t* _find_kv_data(uint8_t key);
+static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t *addr);
 
-//gc有关函数
-// static int _gc_sector_is_empty(uint8_t sector_idx);
-static int embedded_flash_gc(void);
-static int _execute_gc_operation(int gc_temp_sector_idx, int data_sector_idx, uint32_t gc_temp_empty_addr_abs, uint32_t data_resume_addr_abs);
+/* ---  KV记录写入 --- */
+static int _find_writable_data_sector(uint16_t required_space);
+static uint32_t _write_kv_record_to_sector(uint8_t sector_idx, KV_Record *p);
+static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p_addr_abs);
+static uint32_t _write_kv_record(KV_Record *p);
 
-// 状态查询接口
-static embedded_flash_status_t embedded_flash_get_status(void);
+/* ---  数据迁移和垃圾回收（GC） --- */
+static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target_sector_idx);
+static EF_ErrCode ef_embedded_flash_gc(void);
 
+/* ---  初始化和加载 --- */
+static EF_ErrCode _init_all_kv_record(void);
+static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_addr));
+static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr);
 
-
-/**
- * @brief 删除KV记录（分阶段提交）
- * @param addr KV记录地址
- * @return FLASH_NO_ERR=成功, 其他=失败
- * 
- * @note 删除流程：
- *       1. 标记为PRE_DELETE（写入addr+8）
- *       2. 标记为DELETED（写入addr+12）
- */
-static EF_ErrCode _kv_delete_record(uint32_t addr)
-{
-    EF_ErrCode result = EF_OK;
-    uint8_t status_table[KV_STATUS_TABLE_SIZE];
-    
-    /* 阶段1：标记为"预删除" */
-    result = _write_kv_status(addr, EFLASH_KV_PRE_DELETE);
-    if (result != EF_OK) {
-        return result;
-    }
-    
-    /* 阶段2：标记为"已删除" */
-    result = _write_kv_status(addr, EFLASH_KV_DELETED);
-    
-    return result;
-}
-
-/**
- * @brief 读取KV记录并解析状态
- * @param addr KV记录地址
- * @param kv_record 输出：KV记录数据
- * @param status 输出：记录状态
- * @return FLASH_NO_ERR=成功, 其他=失败
- */
-static EF_ErrCode _kv_read_record(uint32_t addr, KV_Record *kv_record, EmbeddedFlash_record_status_e *status)
-{
-    EF_ErrCode result;
-    uint8_t status_table[KV_STATUS_TABLE_SIZE];
-    
-    /* 读取完整记录 */
-    result = flash_port_read(addr, (uint8_t *)kv_record, sizeof(KV_Record));
-    if (result != EF_OK) {
-        return result;
-    }
-    
-    /* 解析状态 */
-    *status = _get_kv_status_from_table(kv_record->status_table);
-    
-    return EF_OK;
-}
-
-/**
- * @brief 恢复异常状态的KV记录（断电恢复）
- * @param addr KV记录地址
- * @param kv_record KV记录数据
- * @param status 当前状态
- * @return FLASH_NO_ERR=成功, 其他=失败
- * 
- * @note 恢复逻辑：
- *       - PRE_WRITE：写入未完成，可能数据不完整 → 标记为DELETED
- *       - PRE_DELETE：删除未完成 → 继续标记为DELETED
- *       - WRITE/DELETED/UNUSED：稳定状态，无需处理
- */
-static EF_ErrCode _kv_recovery_record(uint32_t addr, const KV_Record *kv_record, EmbeddedFlash_record_status_e status)
-{
-    EF_ErrCode result = EF_OK;
-    uint8_t status_table[KV_STATUS_TABLE_SIZE];
-    
-    if (status == EFLASH_KV_PRE_WRITE) {
-        /* 预写入状态：数据可能不完整，标记为已删除 */
-        printf("EmbeddedFlash: Recovery KV record at 0x%08X from PRE_WRITE to DELETED\n", addr);
-        result = _write_kv_status(addr, EFLASH_KV_DELETED);
-    } 
-    else if (status == EFLASH_KV_PRE_DELETE) {
-        /* 预删除状态：完成删除操作 */
-        printf("EmbeddedFlash: Recovery KV record at 0x%08X from PRE_DELETE to DELETED\n", addr);
-        result = _write_kv_status(addr, EFLASH_KV_DELETED);
-    }
-    /* WRITE/DELETED/UNUSED状态无需恢复 */
-    
-    return result;
-}
-
-// 获取数据类型的固定长度
-uint8_t embedded_flash_get_type_size(EmbeddedFlash_data_type_e data_type) 
-{
-    switch (data_type) {
-        case EFLASH_FORMAT_BOOL:
-        case EFLASH_FORMAT_UINT8:
-        case EFLASH_FORMAT_INT8:
-            return 1;
-        case EFLASH_FORMAT_UINT16:
-        case EFLASH_FORMAT_INT16:
-            return 2;
-        case EFLASH_FORMAT_FLOAT:
-        case EFLASH_FORMAT_UINT32:
-        case EFLASH_FORMAT_INT32:
-            return 4;
-        case EFLASH_FORMAT_UINT64:
-        case EFLASH_FORMAT_INT64:
-            return 8;
-        case EFLASH_FORMAT_STRING:
-        case EFLASH_FORMAT_HEX:
-            return 0; // 可变长度，需要用户指定
-        default:
-            return 0;
-    }
-}
-
-/**
- * @brief 初始化持久化存储组件
- * @note 1. 初始化时，会扫描所有扇区，并重建扇区信息
- * @param defaults 默认键值对配置表
- * @param default_count 默认键值对数量
- * @return 0=成功, -1=失败
- */
-int embedded_flash_init(const kv_data_t *defaults, uint8_t default_count) {
-    printf("EmbeddedFlash: Starting initialization...\n");
-    printf("EmbeddedFlash: KV_SECTOR_START_ADDR=0x%08X\n", KV_SECTOR_START_ADDR);
-    printf("EmbeddedFlash: KV_SECTOR_SIZE=%d\n", KV_SECTOR_SIZE);
-    printf("EmbeddedFlash: KV_SECTOR_COUNT=%d\n", KV_SECTOR_COUNT);
-    
-    // 调试：打印扇区头和KV记录结构体大小
-    printf("EmbeddedFlash: sizeof(sector_header_t)=%d bytes\n", sizeof(sector_header_t));
-    printf("EmbeddedFlash: SECTOR_STATUS_TABLE_SIZE=%d bytes\n", SECTOR_STATUS_TABLE_SIZE);
-    printf("EmbeddedFlash: SECTOR_ROLE_TABLE_SIZE=%d bytes\n", SECTOR_ROLE_TABLE_SIZE);
-    printf("EmbeddedFlash: sizeof(KV_Record)=%d bytes\n", sizeof(KV_Record));
-    printf("EmbeddedFlash: KV_STATUS_TABLE_SIZE=%d bytes\n", KV_STATUS_TABLE_SIZE);
-    printf("EmbeddedFlash: KV_MAGIC_OFFSET=%d bytes\n", KV_MAGIC_OFFSET);
-    printf("EmbeddedFlash: EFLASH_WRITE_GRAN=%d bits\n", EFLASH_WRITE_GRAN);
-    for (int i = 0; i < KV_SECTOR_COUNT; i++) {
-        printf("EmbeddedFlash: Sector[%d] addr=0x%08X, status=%d, role=%d\n", 
-               i, m_sector_desc_list[i].sector_addr, 
-               m_sector_desc_list[i].attr.status, m_sector_desc_list[i].attr.role);
-               printf("EmbeddedFlash: Sector[%d] free_space=%d\n", i, m_sector_desc_list[i].free_space);
-               printf("EmbeddedFlash: Sector[%d] record_count=%d\n", i, m_sector_desc_list[i].record_count);
-    }
-
-restart_init://重新开始
-
-    if (defaults == NULL || default_count == 0 || default_count > 255) {
-        return -1;
-    }
-    mp_kv_list = (kv_data_t *)defaults;  // 转换为非const指针
-    m_kv_data_list_count = default_count;
-    
-    /*工作流程
-        1、扫描并重建扇区信息,检查没有扇区信息，确认是否是第一次初始化，如果是第一次初始化，则初始化扇区信息
-        2、检查并处理默认值和初始化状态
-    */
-    //1、扫描并重建扇区信息
-    embedded_flash_status_t status = embedded_flash_get_status();
-    printf("EmbeddedFlash: Current status=%d\n", status);
-    switch(status){
-        case EFLASH_STATUS_NORMAL:{
-            //正常状态
-            goto normal_kv_restore_handle;
-        }
-        case EFLASH_STATUS_FIRST_POWER_ON:{
-            //首次上电
-            // _startup_rebuild_sector会擦除并写入扇区头，同时更新内存中的扇区信息
-            if(_startup_rebuild_sector()!= 0){
-                    return  -1;
-            }
-            // ✅ 已删除重复的_sector_header_write调用
-            // _startup_rebuild_sector已经完成了扇区头的写入
-            // 只需要设置内存中的扇区信息即可（_sector_header_write内部已更新）
-            
-            goto first_power_on_handle;
-        }
-        //
-        case EFLASH_STATUS_EMPTY_SECTOR_ERROR:{
-            //空白扇区异常
-            goto error_handle;//全部擦除，重新处理
-        }
-        case EFLASH_STATUS_NEW_SECTOR_ADDED:{
-            // 非第一次初始化,新增扇区 
-            /* 理论上新增扇区应该继续保持数据的连续性，但是这里不处理，直接全部扇区擦掉，重新建立扇区信息，数据全部恢复成默认值 */
-            //直接擦掉，后续逻辑会好做一点
-            goto error_handle;//全部擦除，重新处理
-        }
-        //
-        case EFLASH_STATUS_MULTI_ROLE_ERROR:{
-            goto error_handle;//全部擦除，重新处理
-        }
-        case EFLASH_STATUS_UNKNOWN_ERROR:{
-            goto error_handle;//全部擦除，重新处理
-        }
-        //GC中断
-        case EFLASH_STATUS_GC_PREPARE:
-        case EFLASH_STATUS_GC_MIGRATING:
-        case EFLASH_STATUS_GC_AFTER_MIGRATE:
-        case EFLASH_STATUS_GC_AFTER_MIGRATE_WITH_EMPTY:{
-            
-            goto gc_inter_handle;
-        }
-        default:
-            goto error_handle;
-    }
-
-   
-//gc中断具体操作
-gc_inter_handle:
-    //获取各扇区角色
-    _startup_restore_sector_attr();
-    embedded_flash_gc();
-
-//正常运行，恢复kv记录
-normal_kv_restore_handle:
-   //获取各扇区角色
-   _startup_restore_sector_attr();
-   //获取各扇区、记录、剩余空间，并将数据赋值到m_sector_desc_list和m_kv_list
-   _startup_restore_kv_data();
-
-//首次上电   
-first_power_on_handle: 
-    //初始化缺失的默认值
-    return _startup_init_missing_defaults();
-
-//异常处理
-error_handle:
-    if(_startup_rebuild_sector()!= 0){
-			return  -1;
-	}
-    goto restart_init;
-}
-
-// ==================== 类型化设置函数 ====================
+/* ---  核心API实现 --- */
 static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type);
-EF_ErrCode embedded_flash_set_bool(uint8_t key, bool value) {
-    uint8_t temp = value ? 1 : 0;
-    return embedded_flash_set(key, (uint8_t*)&temp, sizeof(uint8_t), EFLASH_FORMAT_BOOL);
-}
-
-EF_ErrCode embedded_flash_set_uint8(uint8_t key, uint8_t value) {
-    return embedded_flash_set(key, &value, sizeof(uint8_t), EFLASH_FORMAT_UINT8);
-}
-
-EF_ErrCode embedded_flash_set_int8(uint8_t key, int8_t value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int8_t), EFLASH_FORMAT_INT8);
-}
-
-EF_ErrCode embedded_flash_set_uint16(uint8_t key, uint16_t value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(uint16_t), EFLASH_FORMAT_UINT16);
-}
-
-EF_ErrCode embedded_flash_set_int16(uint8_t key, int16_t value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int16_t), EFLASH_FORMAT_INT16);
-}
-
-EF_ErrCode embedded_flash_set_uint32(uint8_t key, uint32_t value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(uint32_t), EFLASH_FORMAT_UINT32);
-}
-
-EF_ErrCode embedded_flash_set_int32(uint8_t key, int32_t value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int32_t), EFLASH_FORMAT_INT32);
-}
-
-EF_ErrCode embedded_flash_set_uint64(uint8_t key, uint64_t value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(uint64_t), EFLASH_FORMAT_UINT64);
-}
-
-EF_ErrCode embedded_flash_set_int64(uint8_t key, int64_t value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int64_t), EFLASH_FORMAT_INT64);
-}
-
-EF_ErrCode embedded_flash_set_float(uint8_t key, float value) {
-    return embedded_flash_set(key, (uint8_t*)&value, sizeof(float), EFLASH_FORMAT_FLOAT);
-}
-
-EF_ErrCode embedded_flash_set_string(uint8_t key, const char *value) {
-    if (value == NULL) {
-        printf("Invalid string value for key=%d\n", key);
-        return EF_ERR_PARAM;
-    }
-    uint8_t length = strlen(value);
-    if (length+1 > KV_MAX_VALUE_SIZE) {
-        printf("String too long for key=%d, length=%d\n", key, length);
-        return EF_ERR_PARAM;
-    }
-    // 存储字符串时包含结束符，所以长度+1
-    return embedded_flash_set(key, (uint8_t*)value, length+1, EFLASH_FORMAT_STRING);
-}
-
-EF_ErrCode embedded_flash_set_hex(uint8_t key, const uint8_t *value, uint8_t length) {
-    if (value == NULL || length == 0 || length > KV_MAX_VALUE_SIZE) {
-        printf("Invalid hex data for key=%d, length=%d\n", key, length);
-        return EF_ERR_PARAM;
-    }
-    return embedded_flash_set(key, value, length, EFLASH_FORMAT_HEX);
-}
-
-// ==================== 内部通用设置函数 ====================
-
-/**
- * @brief 设置键值对（内部使用）
- * @param key 键
- * @param value 值指针
- * @param length 值长度
- * @param data_type 数据类型
- * @return 0=成功, -1=失败
- */
-static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type) {
-    printf("[SET] key=%d, type=%d, len=%d\n", key, data_type, length);
-    
-    if (value == NULL || length == 0) {
-		printf("Invalid input for set operation: key=%d, len:%d\n", key,length);
-        return EF_ERR_PARAM;
-    }
-    
-    // 验证长度与数据类型匹配
-    uint8_t expected_length = embedded_flash_get_type_size(data_type);
-    if (expected_length > 0) {
-        // 固定长度类型
-        if (length != expected_length) {
-            printf("Invalid length for key=%d: expected=%d, got=%d\n", key, expected_length, length);
-            EFLASH_ASSERT(0);
-            return EF_ERR_PARAM;
-        }
-    } else {
-        // 可变长度类型（STRING, HEX）
-        if (length == 0 || length > KV_MAX_VALUE_SIZE) {
-            printf("Invalid length for key=%d: length=%d (must be 1-%d for variable length types)\n", key, length, KV_MAX_VALUE_SIZE);
-            EFLASH_ASSERT(0);
-            return EF_ERR_PARAM;
-        }
-    }
-    
-    kv_data_t *p_kv_data = _find_kv_data(key);
-    if(p_kv_data == NULL){
-        printf("Key not found: %d\n", key);
-        return EF_ERR_PARAM;
-    }
-    if (data_type != p_kv_data->data_type) {
-        printf("Invalid data type for key=%d: expected=%d, actual=%d\n", key, p_kv_data->data_type, data_type);
-        return EF_ERR;
-    }
-    KV_Record record = {0};
-    //从flash将旧数据读出来，如果没变化就不写入
-    if(_find_latest_record(p_kv_data, &record, &p_kv_data->addr_abs) != 0){
-        return -1;
-    }
-    if(record.value_length == length && memcmp(record.value, value, length) == 0){
-        return EF_OK;
-    }
-    /*工作流程
-        1、新 PRE_WRITE → 新 WRITE → 旧 PRE_DELETE → 旧 DELETED
-        2、任意时刻至少有一条 WRITE 生效（数据存储顺序为先旧后新）
-    */
-    // 构造记录
-    memset(&record, 0xFF, sizeof(KV_Record));  // 先全部初始化为0xFF
-	_set_kv_status_table(record.status_table, EFLASH_KV_PRE_WRITE);
-    record.magic = KV_HEADER_MAGIC;
-    record.data_type = data_type;
-    record.key = key;
-    record.value_length = length;  // value_length就是值的长度
-    
-    // 额外的边界检查，防止数组越界
-    if (length > KV_MAX_VALUE_SIZE) {
-        printf("CRITICAL: length=%d exceeds KV_MAX_VALUE_SIZE=%d for key=%d\n", length, KV_MAX_VALUE_SIZE, key);
-        return EF_ERR_PARAM;
-    }
-    
-    // 关键修复：先清零整个value数组，然后复制数据
-    memset(record.value, 0, KV_MAX_VALUE_SIZE);
-    memcpy(record.value, value, length);
-
-    // 计算CRC - 跳过status_table(16) + magic(1) + data_type(1)，从key开始校验key + value_length + value
-    // 关键修复：使用固定长度KV_MAX_VALUE_SIZE而不是实际数据长度
-    record.crc = crc16_x25_calculate((uint8_t*)&record.key, 2 + KV_MAX_VALUE_SIZE);
-    // 写入记录（使用状态表机制实现分阶段提交）
-    uint32_t new_write_abs_addr = 0;
-    if(_write_record(&record,&new_write_abs_addr) != 0){
-		printf("_write_record fail\r\n");
-        return EF_ERR;
-    }
-
-    // 使用类型安全函数将新记录标记为WRITE状态
-    if(_write_kv_status(new_write_abs_addr, EFLASH_KV_WRITE) != EF_OK){
-		printf("write EFLASH_KV_WRITE fail\r\n");
-        EFLASH_ASSERT(0);
-        return EF_ERR;
-    }
-    //如果不相等，那么内部有大于2条数据记录，需要将旧记录设置为删除
-    if(p_kv_data->addr_abs != new_write_abs_addr){
-        //使用状态表机制删除旧记录
-        if(_kv_delete_record(p_kv_data->addr_abs) != EF_OK){
-            printf("delete old record fail\r\n");
-            EFLASH_ASSERT(0);
-            return EF_ERR_VERIFY;
-        }
-    }
-    //更新最新记录的信息到ram
-    p_kv_data->addr_abs = new_write_abs_addr;
-    p_kv_data->value_length = record.value_length;
-    p_kv_data->data_type = record.data_type;
-    p_kv_data->data_source = KV_DATA_SOURCE_UPDATE_WRITE;//更新数据到掉电储存区
-		memcpy(p_kv_data->value, value, length);
-
-    //验证是否写入
-    KV_Record verify_record = {0};
-    if (flash_port_read(new_write_abs_addr, (uint8_t*)&verify_record, sizeof(KV_Record)) == EF_OK) {
-        // 检查记录的基本信息是否匹配
-        bool basic_match = (verify_record.magic == record.magic &&
-                           verify_record.data_type == record.data_type &&
-                           verify_record.key == record.key &&
-                           verify_record.value_length == record.value_length &&
-                           memcmp(verify_record.value, record.value, KV_MAX_VALUE_SIZE) == 0 &&
-                           verify_record.crc == record.crc);
-        
-        // 检查状态是否为WRITE
-        EmbeddedFlash_record_status_e read_status = _get_kv_status_from_table(verify_record.status_table);
-        bool status_match = (read_status == EFLASH_KV_WRITE);
-
-        if(!basic_match || !status_match){
-            printf("VERIFY FAIL: key=%d, addr=0x%x\n", key,new_write_abs_addr);
-            printf("Basic match: %s, Status match: %s (status=%d)\n", 
-                   basic_match ? "PASS" : "FAIL", 
-                   status_match ? "PASS" : "FAIL", 
-                   read_status);
-            
-            if(!basic_match) {
-                printf("Expected record:\n");
-                printf("  magic=0x%02X, data_type=%d, key=%d, value_length=%d\n", 
-                       record.magic, record.data_type, record.key, record.value_length);
-                printf("  value: ");
-                for(int i=0; i<KV_MAX_VALUE_SIZE; i++) printf("%02X ", record.value[i]);
-                printf("\n  crc=0x%04X\n", record.crc);
-                
-                printf("Read back record:\n");
-                printf("  magic=0x%02X, data_type=%d, key=%d, value_length=%d\n", 
-                       verify_record.magic, verify_record.data_type, verify_record.key, verify_record.value_length);
-                printf("  value: ");
-                for(int i=0; i<KV_MAX_VALUE_SIZE; i++) printf("%02X ", verify_record.value[i]);
-                printf("\n  crc=0x%04X\n", verify_record.crc);
-            }
-            return -1;
-        }
-    }
-    printf("Set operation successful for key=%d,addr:0x%x\n", key,new_write_abs_addr);
-
-    
-    return EF_OK;
-}
-
-/**
- * @brief 获取键值对
- * @param key 键
- * @param value 值缓冲区
- * @param length 返回值长度
- * @param data_type 返回数据类型
- * @return 0=成功, -1=失败
- */
-EF_ErrCode embedded_flash_get(uint8_t key, uint8_t *value, uint8_t *length, uint8_t *data_type) {
-    if (value == NULL || length == NULL || data_type == NULL) {
-        printf("Invalid input for get operation: key=%d\n", key);
-        return EF_ERR_PARAM;
-    }
-    /* 工作流程
-        1、根据地址获取flash数据记录，如果没找到就遍历整个扇区看有没有数据记录
-        2、对比读取出来的数据记录并跟当前数据对比，如果有差异就断言失败
-        3、返回数据
-    */
-    
-    kv_data_t *p_kv_data = _find_kv_data(key);
-    if(p_kv_data == NULL){
-        printf("Key not found: %d\n", key);    
-        return EF_ERR;
-    }
-    // printf("Getting data for key=%d, stored address=0x%x\n", key, p_kv_data->addr_abs);
-    uint32_t addr = 0;
-    KV_Record record={0};
-    if(_find_latest_record(p_kv_data, &record, &addr) != 0){
-        printf("Failed to find latest record for key=%d\n", key);
-        return EF_ERR;
-    }
-    // 复制数据
-    *length = record.value_length;  // value_length就是值的长度
-    *data_type = record.data_type;
-    
-    // 检查缓冲区大小，防止数组越界
-    if (*length > KV_MAX_VALUE_SIZE) {
-        printf("CRITICAL: value_length=%d exceeds KV_MAX_VALUE_SIZE=%d for key=%d\n", *length, KV_MAX_VALUE_SIZE, key);
-        return EF_ERR_PARAM;
-    }
-    memcpy(value, record.value, *length);
-    printf("Get operation successful for key=%d, len=%d, addr=0x%x\n", key, *length, p_kv_data->addr_abs);
-    return EF_OK;
-}
-
-/**
- * @brief 删除键值对
- * @param key 键
- * @return 0=成功, -1=失败
- */
-EF_ErrCode embedded_flash_delete(uint8_t key) {
-    /* 工作流程
-        1、mp_kv_list中找到对应键值对的记录
-        2、将记录状态设置为删除
-        3、写入成功后将数据设置为删除，并更新addr_abs_offset，方便读写
-        4、写入失败返回错误码
-    */
-    kv_data_t *p_kv_data = _find_kv_data(key);
-    if(p_kv_data == NULL){
-        return EF_ERR;
-    }
-    
-    // 使用状态表机制删除记录
-    if(_kv_delete_record(p_kv_data->addr_abs) != EF_OK){
-        EFLASH_ASSERT(0);
-        return EF_ERR;
-    }
-    
-    p_kv_data->addr_abs = 0;
-    p_kv_data->data_source = KV_DATA_SOURCE_DEFAULT;
-    return EF_OK;
-}
-
-/**
- * @brief 垃圾回收（Garbage Collection）
- * @note GC是持久化存储的核心机制，用于回收无效数据，整理有效数据
- * @note 采用循环存储模式，确保断电安全的状态机设计
- * @note 支持GC过程中断后的恢复操作
- * @return 0=成功, -1=失败
- */
-static int embedded_flash_gc(void) {
-    /*
-    ==================== 增量GC操作流程详解 ====================
-    
-    1. 【GC触发条件】
-       - 当所有数据扇区都满了，无法写入新数据时触发GC
-       - 上电时检测到有扇区是GC_TEMP或者DATA_GCING状态，说明上次GC被中断，需要完成GC操作
-    完成上述功能，需要的api，迁移函数
-
-    2. 【增量GC执行步骤】
-       a) 检测GC中断状态（GC_TEMP、DATA_GCING）
-       b) 如果存在中断状态，继续完成被中断的GC操作
-       c) 如果是正常GC，获取当前GC扇区并开始新的GC操作
-       d) 每次GC只处理一个数据扇区，不是所有扇区
-       e) 将有效数据从当前数据扇区迁移到GC区
-       f) 迁移完成后进行扇区角色切换
-    
-    3. 【增量GC特点】
-       - 每次只处理一个扇区，减少GC时间
-       - 避免长时间阻塞系统
-       - 可以分多次完成所有扇区的整理
-       - 断电安全：使用状态机确保数据一致性
-       - 支持中断恢复：能够从GC_TEMP状态继续完成GC
-    */
-    int gc_sector_pos, data_sector_pos;
-    uint32_t gc_temp_resume_empty_addr_abs = 0;
-    uint32_t data_gcing_resume_addr_abs = 0;
-    
-    embedded_flash_status_t status = embedded_flash_get_status();
-    printf("Starting GC operation, status=%d\n", status);
-    switch(status){
-        case EFLASH_STATUS_NORMAL:{
-            // 获取当前GC扇区
-            gc_sector_pos = _find_sector_role(EFLASH_SECTOR_ROLE_GC);
-            // 获取第一个数据区
-            data_sector_pos = (gc_sector_pos + 1) % KV_SECTOR_COUNT;
-						printf("EFLASH_STATUS_NORMAL\n");
-            break;
-        }
-        //GC中断恢复
-        case EFLASH_STATUS_GC_PREPARE:{
-            gc_sector_pos = _find_sector_role(EFLASH_SECTOR_ROLE_GC_TEMP);
-            // 获取第一个数据区
-            data_sector_pos = (gc_sector_pos + 1) % KV_SECTOR_COUNT;
-						printf("EFLASH_STATUS_GC_PREPARE\n");
-            break;
-        }
-        case EFLASH_STATUS_GC_MIGRATING:{
-						printf("EFLASH_STATUS_GC_MIGRATING\n");
-            //这里要遍历cg临时区和被gc数据区，知道上次遍历的位置并还原
-            gc_sector_pos = _find_sector_role(EFLASH_SECTOR_ROLE_GC_TEMP);
-            data_sector_pos = _find_sector_role(EFLASH_SECTOR_ROLE_DATA_GCING);
-            
-            //遍历gc临时扇区
-            uint32_t last_gc_temp_scan_addr = m_sector_desc_list[gc_sector_pos].sector_addr + sizeof(sector_header_t);
-            uint32_t last_gc_temp_end_addr = m_sector_desc_list[gc_sector_pos].sector_addr + KV_SECTOR_SIZE;
-            
-            //获取当前迁移的位置 - 找到GC临时扇区中最后一条记录
-            KV_Record temp_record = {0};
-            KV_Record last_gc_temp_record = {0}; 
-            KV_Record last_data_gcing_record = {0};
-            
-            uint16_t record_count = 0;
-            // 遍历GC临时扇区，找到最后一条记录
-            while (last_gc_temp_scan_addr + sizeof(KV_Record) < last_gc_temp_end_addr) {//使用《=还是《
-                
-                // 读取记录
-                if (flash_port_read(last_gc_temp_scan_addr, (uint8_t*)&temp_record, sizeof(KV_Record)) != EF_OK) {
-                    //todo...
-        
-                    // data_sector_scan_addr += sizeof(KV_Record);
-                    continue;
-                }
-                
-                // 检查是否为有效的KV记录，gc临时区只有pre_write和write状态
-                if (_is_kv_record(&temp_record)) {
-                    last_gc_temp_record = temp_record;//更新最新有效记录
-                     // 记录最后一条记录的地址
-                    uint8_t record_status = (uint8_t)_get_kv_status_from_table(last_gc_temp_record.status_table);
-                    if(record_status == EFLASH_KV_PRE_WRITE){
-                        gc_temp_resume_empty_addr_abs = last_gc_temp_scan_addr;
-                    }else{
-                        gc_temp_resume_empty_addr_abs = last_gc_temp_scan_addr;
-                    }
-                    record_count++;
-                }else{
-                    //要检查这片区域是不是0xff
-                    if(temp_record.magic != 0xFF){
-                        //这片区域有问题，可能上次掉电没完全写入，跳过这片区域重新开始
-                        last_gc_temp_scan_addr += sizeof(KV_Record);
-                        gc_temp_resume_empty_addr_abs = last_gc_temp_scan_addr;
-                        break;
-                    }else{
-                        //这片区域机器后面区域都是空的,可以停止遍历了
-                        gc_temp_resume_empty_addr_abs = last_gc_temp_scan_addr;
-                        break;
-                    }
-                }
-                last_gc_temp_scan_addr += sizeof(KV_Record);
-            }	
-            //更新扇区信息
-            m_sector_desc_list[gc_sector_pos].free_space = last_gc_temp_end_addr - last_gc_temp_scan_addr;
-            m_sector_desc_list[gc_sector_pos].record_count = record_count;//统计记录
-            
-            record_count = 0;
-            //遍历被gc扇区 - 找到最后一条已处理的记录位置
-            uint32_t last_data_gcing_scan_addr = m_sector_desc_list[data_sector_pos].sector_addr + sizeof(sector_header_t);
-            uint32_t last_data_gcing_end_addr = m_sector_desc_list[data_sector_pos].sector_addr + KV_SECTOR_SIZE;
-        
-            while (last_data_gcing_scan_addr + sizeof(KV_Record) < last_data_gcing_end_addr) {//使用<=还是<
-                // 读取记录
-                if (flash_port_read(last_data_gcing_scan_addr, (uint8_t*)&temp_record, sizeof(KV_Record)) != EF_OK) {
-                    //todo...
-        
-                    // data_sector_scan_addr += sizeof(KV_Record);
-                    continue;
-                }
-                
-                // 只处理有效的记录（EFLASH_KV_WRITE状态）
-                if (_is_kv_record(&temp_record)) {
-                    
-                    last_data_gcing_record = temp_record;//更新最新有效记录
-                    //互为副本，所以数据值一定一样
-                    if(last_data_gcing_record.key == last_gc_temp_record.key
-                    && last_data_gcing_record.value_length == last_gc_temp_record.value_length
-                    && memcmp(last_data_gcing_record.value,
-                              last_gc_temp_record.value,
-                              last_data_gcing_record.value_length) == 0
-                    ){
-                        //如果gc临时区最后一条数据是EFLASH_KV_PRE_WRITE，那么被gc数据区的当前记录一定是EFLASH_KV_WRITE，因为pre_write和write是成对出现的
-                        uint8_t gc_temp_status = (uint8_t)_get_kv_status_from_table(last_gc_temp_record.status_table);
-                        uint8_t data_gcing_status = (uint8_t)_get_kv_status_from_table(last_data_gcing_record.status_table);
-                        
-                        if(gc_temp_status == EFLASH_KV_PRE_WRITE
-                           && data_gcing_status == EFLASH_KV_WRITE){
-                            //将gc临时区的数据置为有效（使用类型安全函数）
-                            if (_write_kv_status(gc_temp_resume_empty_addr_abs, EFLASH_KV_WRITE) != EF_OK) {
-                                EFLASH_ASSERT(0);
-                                return -1;
-                            }
-                            
-                            //将原记录标记为DELETED状态（使用状态表机制）
-                            if (_kv_delete_record(last_data_gcing_scan_addr) != EF_OK) {
-                                EFLASH_ASSERT(0);
-                                return -1;
-                            }
-                            data_gcing_resume_addr_abs = last_data_gcing_scan_addr;
-                            break;//跳出while循环
-                        }
-                        //如果gc临时区最后一条记录是EFLASH_KV_WRITE，那么被gc数据区的当前记录可能也是EFLASH_KV_WRITE或者是delete
-                        else if(gc_temp_status == EFLASH_KV_WRITE){
-                            if(data_gcing_status == EFLASH_KV_WRITE){
-                                //将原记录标记为DELETED状态（使用状态表机制）
-                                if (_kv_delete_record(last_data_gcing_scan_addr) != EF_OK) {
-                                    EFLASH_ASSERT(0);
-                                    return -1;
-                                }
-                                data_gcing_resume_addr_abs = last_data_gcing_scan_addr;
-                                break;//跳出while循环
-                            }else if(data_gcing_status == EFLASH_KV_DELETED){
-                                data_gcing_resume_addr_abs = last_data_gcing_scan_addr;
-                                break;//跳出while循环
-                            }
-                        }
-                    }    
-										record_count++;
-                }
-                last_data_gcing_scan_addr += sizeof(KV_Record);
-            }	
-            //更新扇区信息
-            m_sector_desc_list[data_sector_pos].free_space = last_data_gcing_end_addr - last_data_gcing_scan_addr;
-            m_sector_desc_list[data_sector_pos].record_count = record_count;
-            goto gc_operation_handle;
-        }
-        case EFLASH_STATUS_GC_AFTER_MIGRATE:
-        case EFLASH_STATUS_GC_AFTER_MIGRATE_WITH_EMPTY:{
-						printf("EFLASH_STATUS_GC_AFTER_MIGRATE，EFLASH_STATUS_GC_AFTER_MIGRATE_WITH_EMPTY\n");
-            if(status == EFLASH_STATUS_GC_AFTER_MIGRATE_WITH_EMPTY){
-                gc_sector_pos = _find_sector_role(EFLASH_SECTOR_ROLE_UNASSIGNED);
-            }else{
-                gc_sector_pos = _find_sector_role(EFLASH_SECTOR_ROLE_DATA_GCING);
-            }
-            if (gc_sector_pos < 0) {
-                return -1;
-            }
-            _erase_sector(gc_sector_pos);
-            _sector_header_write(gc_sector_pos, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_GC);
-            m_sector_desc_list[gc_sector_pos].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);
-            m_sector_desc_list[gc_sector_pos].record_count = 0;
-            //再触发正常gc流程
-            // 获取当前GC扇区
-            gc_sector_pos = _find_sector_role(EFLASH_SECTOR_ROLE_GC);
-            if (gc_sector_pos < 0) {
-                return -1;
-            }
-            // 获取第一个数据区
-            data_sector_pos = (gc_sector_pos + 1) % KV_SECTOR_COUNT;
-            break;
-        }
-        default:
-            return -1;
-    }
-    //获取地址
-    gc_temp_resume_empty_addr_abs = m_sector_desc_list[gc_sector_pos].sector_addr+sizeof(sector_header_t);
-    data_gcing_resume_addr_abs = m_sector_desc_list[data_sector_pos].sector_addr+sizeof(sector_header_t);
-    
-    // 将GC区设置为临时GC区，确保原子性操作
-
-    _sector_header_write(gc_sector_pos, m_sector_desc_list[gc_sector_pos].attr.status, EFLASH_SECTOR_ROLE_GC_TEMP);
-    
-    
-    // 设置为GC进行时状态，标记正在被GC的数据区
-    _sector_header_write(data_sector_pos, m_sector_desc_list[data_sector_pos].attr.status, EFLASH_SECTOR_ROLE_DATA_GCING);
-    //执行gc操作
-gc_operation_handle:
-    if(_execute_gc_operation(gc_sector_pos, data_sector_pos, gc_temp_resume_empty_addr_abs, data_gcing_resume_addr_abs) != 0){
-        return -1;
-    }
-    printf("GC operation completed successfully\n");
-    return _refresh_sector_data(gc_sector_pos);
-}
-
-// ==================== 内部函数实现 ====================
-// /**
-//  * @brief 检查GC扇区是否为空
-//  * @param sector_idx 扇区索引
-//  * @return 1=空, 0=非空, -1=错误
-//  */
-// static int _gc_sector_is_empty(uint8_t sector_idx)
-// {
-//     if (sector_idx >= KV_SECTOR_COUNT) {
-//         return -1;
-//     }
-    
-//     // 遍历整个扇区，看是不是都是FF，扇区开头4字节的头信息除外
-//     uint32_t start_addr = m_sector_desc_list[sector_idx].sector_addr + sizeof(sector_header_t);
-//     uint32_t end_addr = m_sector_desc_list[sector_idx].sector_addr + KV_SECTOR_SIZE;
-    
-//     // 先按4字节对齐读取
-//     while (start_addr <= end_addr && start_addr + 4 <= end_addr) {
-//         uint32_t data;
-//         if (drv_flash_read(start_addr, (uint8_t*)&data, 4) != 4) {
-//             return -1;
-//         }
-        
-//         // 检查是否都是0xFF
-//         if (data != 0xFFFFFFFF) {
-//             return 0;  // 非空
-//         }
-        
-//         start_addr += 4;
-//     }
-    
-//     // 处理剩余不足4字节的部分
-//     while (start_addr < end_addr) {
-//         uint8_t byte;
-//         if (drv_flash_read(start_addr, &byte, 1) != 1) {
-//             return -1;
-//         }
-        
-//         if (byte != 0xFF) {
-//             return 0;  // 非空
-//         }
-        
-//         start_addr++;
-//     }
-    
-//     return 1;  // 空
-// }
-
-static int _startup_rebuild_sector(void)
-{
-	for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
-        //擦除扇区
-        int ret = _erase_sector(i);
-        //重建扇区，写入新的头信息
-        if(i == KV_SECTOR_COUNT-1) {
-            ret |= _sector_header_write(i, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_GC);
-        }else{
-            ret |= _sector_header_write(i, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_DATA);
-        }
-        if(ret != 0){
-            return -1;
-        }
-	}	
-	return 0;
-}
-static void _startup_restore_sector_attr(void) {
-    
-    for (int i = 0; i < KV_SECTOR_COUNT; i++) {
-        sector_header_t header = {0};
-        if(_sector_header_read(i, &header) != 0) {
-            continue;
-        }else{
-            //to do..
-            //如果没有头信息该怎么办
-        }
-    }
-}
-/**
- * @brief 刷新指定扇区的数据与状态
- * @param sector_idx 扇区索引
- * @return 0=成功, -1=失败
- */
-static int _refresh_sector_data(int sector_idx) {
-	// 跳过GC扇区，只处理数据扇区
-	if (m_sector_desc_list[sector_idx].attr.role == EFLASH_SECTOR_ROLE_GC) {
-		// GC扇区应该是空的，设置相应状态
-		m_sector_desc_list[sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);
-		m_sector_desc_list[sector_idx].record_count = 0;
-		m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
-		return 0;
-	}
-
-	uint32_t scan_addr = m_sector_desc_list[sector_idx].sector_addr + sizeof(sector_header_t);
-	uint32_t sector_end_addr = m_sector_desc_list[sector_idx].sector_addr + KV_SECTOR_SIZE;
-	uint16_t record_count = 0;
-
-    // 扫描当前扇区的所有记录
-    while (scan_addr + sizeof(KV_Record) < sector_end_addr) {//使用<=还是<
-		KV_Record record ={0};
-		// 读取完整记录
-		if (flash_port_read(scan_addr, (uint8_t*)&record, sizeof(KV_Record)) == EF_OK) {
-            // 检查记录基本有效性（magic、CRC等）
-            if (_is_kv_record(&record)) {
-                // 查找对应的kv_data_t
-                kv_data_t *p_kv_data = _find_kv_data(record.key);
-                if (p_kv_data != NULL) {
-                    // 跳过无效记录，但仍需要统计record_count
-                    uint8_t record_status = (uint8_t)_get_kv_status_from_table(record.status_table);
-                    if (record_status == EFLASH_KV_DELETED
-                    || record_status == EFLASH_KV_PRE_DELETE
-                    || record_status == EFLASH_KV_PRE_WRITE) {
-                        record_count++;
-                        scan_addr += sizeof(KV_Record);
-                        continue;
-                    }
-
-                    //gc过程和set能保证数据区存在0<有效数据<=2条,所以这里从第一个数据区取数据一定能取到最新的
-                    p_kv_data->addr_abs = scan_addr;
-                    p_kv_data->value_length = record.value_length;
-                    p_kv_data->data_type = record.data_type;
-                    p_kv_data->data_source = KV_DATA_SOURCE_FLASH_READ;
-                    memcpy(p_kv_data->value, record.value, record.value_length);
-                }
-                record_count++;
-            } else {
-                // 检查是否是全0xFF区域（空白区域）
-                uint8_t all_0xff = 1;
-                uint8_t *record_bytes = (uint8_t*)&record;
-                for (int k = 0; k < sizeof(KV_Record); k++) {
-                    if (record_bytes[k] != 0xFF) {
-                        all_0xff = 0;
-                        break;//跳出for循环
-                    }
-                }
-                if (all_0xff) {
-                    // 遇到全0xFF区域，说明后面都是空白区域
-                    break;
-                } /*else {
-                    // 无效数据但不是全0xFF，标记为无效（写入全0）
-                    memset(&record, 0, sizeof(KV_Record));
-                    drv_flash_write(scan_addr, (uint8_t*)&record, sizeof(KV_Record));
-                }*///不清0
-            }
-        }
-        //成功失败都继续推进，避免死循环
-		scan_addr += sizeof(KV_Record);
-	}
-
-	// 更新扇区状态信息
-	m_sector_desc_list[sector_idx].free_space = sector_end_addr - scan_addr;
-	m_sector_desc_list[sector_idx].record_count = record_count;
-
-	// 设置扇区状态
-	if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
-		m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FULL;
-	} else if (record_count > 0) {
-		m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
-	} else {
-		m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
-	}
-
-	return 0;
-}
-/**
- * @brief 上电时恢复键值对数据
- * @note 扫描所有扇区，从Flash读取数据到RAM，重建扇区状态信息
- * @return 0=成功, -1=失败
- */
-static int _startup_restore_kv_data(void) {
-
-    //一定要从第一个数据区开始，因为数据是按顺序储存的,在写入过程中掉电会导致数据区有两条有效数据
-    
-    //先看有没有gc区，如果没有gc区就看有没有gc临时区，如果没有gc临时区就看有没有被gc区
-    uint8_t first_data_sector_pos = 0;
-    for (int j = 0; j < KV_SECTOR_COUNT; j++) {
-        //读头信息
-        sector_header_t header = {0};
-        if(_sector_header_read(j, &header) != 0) {
-            continue;
-        }
-        uint8_t role = (uint8_t)_get_sector_role_from_table(header.role_table);
-        if(role == EFLASH_SECTOR_ROLE_GC
-        || role == EFLASH_SECTOR_ROLE_GC_TEMP) {
-            first_data_sector_pos = (j + 1) % KV_SECTOR_COUNT;
-            break;
-        }
-        if(role == EFLASH_SECTOR_ROLE_DATA_GCING) {
-            first_data_sector_pos = j;
-            break;
-        }
-    }
-
-	//读取所有扇区。不管是gc临时、数据区、被gc数据区,GC区就没必要了，因为GC区应该都是空的
-	for (int i = 0; i < KV_SECTOR_COUNT; i++) {
-		int sector_idx = (first_data_sector_pos + i) % KV_SECTOR_COUNT;
-		_refresh_sector_data(sector_idx);
-	}
-    
-    return 0;
-}
-
-/**
- * @brief 上电时初始化缺失的默认值
- * @note 将Flash中不存在的键值对写入默认值
- * @return 0=成功, -1=失败
- */
-static int _startup_init_missing_defaults(void) {
-    for (int i = 0; i < m_kv_data_list_count; i++) {
-        if (mp_kv_list[i].data_source == KV_DATA_SOURCE_DEFAULT) {
-            // 构造默认值记录
-            KV_Record record={0};
-            record.magic = KV_HEADER_MAGIC;
-            _set_kv_status_table(record.status_table, EFLASH_KV_PRE_WRITE);
-            record.data_type = mp_kv_list[i].data_type;
-            record.key = mp_kv_list[i].key;
-            record.value_length = mp_kv_list[i].value_length;
-            
-            // 检查边界，防止数组越界
-            if (mp_kv_list[i].value_length > KV_MAX_VALUE_SIZE) {
-                printf("CRITICAL: default value_length=%d exceeds KV_MAX_VALUE_SIZE=%d for key=%d\n", 
-                       mp_kv_list[i].value_length, KV_MAX_VALUE_SIZE, mp_kv_list[i].key);
-                return -1;
-            }
-            
-            // 关键修复：先清零整个value数组，然后复制数据
-            memset(record.value, 0, KV_MAX_VALUE_SIZE);
-            memcpy(record.value, mp_kv_list[i].value, mp_kv_list[i].value_length);
-            // 计算CRC - 跳过status_table(16) + magic(1) + data_type(1)，从key开始
-            record.crc = crc16_x25_calculate((uint8_t*)&record.key, 2 + KV_MAX_VALUE_SIZE);
-            
-            // 写入记录（使用状态表机制）
-            uint32_t write_addr_abs = 0;
-            if (_write_record(&record, &write_addr_abs) != 0) {
-                return -1;
-            }
-            
-            // 使用类型安全函数标记为WRITE状态
-            if(_write_kv_status(write_addr_abs, EFLASH_KV_WRITE) != EF_OK){
-                printf("Failed to set WRITE status for key=%d at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
-                EFLASH_ASSERT(0);
-                return -1;
-            }
-            
-            // 更新RAM中的状态
-            mp_kv_list[i].addr_abs = write_addr_abs;
-            mp_kv_list[i].data_source = KV_DATA_SOURCE_FIRST_WRITE;
-            
-            printf("Initialized default value for key=%d at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
-        }
-    }
-    
-    return 0;
-}
-
-//遍历flash所有扇区的记录
-static int _find_latest_record_callback(KV_Record *record) {
-    return 0;
-}
-/**
- * @brief 遍历整个扇区的记录
- * @param func 回调函数,找到记录后用户自行选择不同的回调去处理记录
- * @return 0=成功, -1=失败
- */
-static int _foreach_sector_record(int (*func)(KV_Record *record)) {
-    for (int i = 0; i < KV_SECTOR_COUNT; i++) {
-        if (m_sector_desc_list[i].attr.role == EFLASH_SECTOR_ROLE_DATA || m_sector_desc_list[i].attr.role == EFLASH_SECTOR_ROLE_DATA_GCING) {
-            uint32_t scan_addr = m_sector_desc_list[i].sector_addr + sizeof(sector_header_t);
-            uint32_t end_addr = m_sector_desc_list[i].sector_addr + KV_SECTOR_SIZE;
-            while (scan_addr + sizeof(KV_Record) < end_addr) {//使用<=还是<
-                KV_Record temp_record = {0};
-                if (flash_port_read(scan_addr, (uint8_t*)&temp_record, sizeof(KV_Record)) == EF_OK) {
-                    if (_is_kv_record(&temp_record)){
-                        if(func != NULL){
-                            if(func(&temp_record) == 0){
-                                return 0;
-                            }
-                        }
-                    }
-                }
-                scan_addr += sizeof(KV_Record);
-            }
-        }
-    }
-    return -1;
-}
-/**
- * @brief 查找指定键的最新记录
- * @param key 键
- * @param record 记录
- * @param addr 记录地址 
- * @return 0=成功, -1=失败
- */
-static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t *addr) {
-    uint32_t read_addr = p_kv_data->addr_abs;
-    if(flash_port_read(read_addr, (uint8_t*)record, sizeof(KV_Record)) != EF_OK){
-        printf("Failed to read record at stored address=0x%x for key=%d\n", read_addr, p_kv_data->key);
-        return -1;
-    }
-    if (!_is_kv_record(record)){
-        printf("Invalid record at stored address=0x%x for key=%d\n", read_addr, p_kv_data->key);
-        // _foreach_sector_record()
-        // printf("No valid record found for key=%d after scanning all sectors\n", p_kv_data->key);
-        return -1;
-    }
-    *addr = read_addr;
-    if(memcmp(record->value, p_kv_data->value, p_kv_data->value_length) != 0){
-        goto data_diff_proce;
-    }
-    if(record->data_type != p_kv_data->data_type){
-        goto data_diff_proce;
-    }
-
-    
-    //有没有可能长度不一样？？？？
-    //todo...
-
-    //数据没有差异
-    return 0;
-
-data_diff_proce:
-    if(record->value_length > KV_MAX_VALUE_SIZE){
-        EFLASH_ASSERT(0);
-        return -1;
-    }
-    p_kv_data->value_length = record->value_length;  // value_length就是值的长度
-	p_kv_data->data_type = record->data_type;
-    p_kv_data->data_source = KV_DATA_SOURCE_FLASH_OVERRIDE;//从掉电储存区更新数据
-    memcpy(p_kv_data->value, record->value, record->value_length);
-    return 0;
-}
-
-/**
- * @brief 写入记录到指定扇区
- * @param sector_idx 目标扇区索引
- * @param p KV记录指针
- * @param p_addr_abs_offset 返回写入的绝对偏移地址
- * @return 0=成功, -1=失败
- */
-static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p_addr_abs) {
-    if (sector_idx >= KV_SECTOR_COUNT || p == NULL || p_addr_abs == NULL) {
-        return -1;
-    }
-    
-    // 检查扇区是否有足够空间
-    if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
-        return -1;  // 空间不足
-    }
-    
-    // 计算写入地址 = 扇区起始地址 + 扇区头大小 + 已使用空间
-    uint32_t write_addr = m_sector_desc_list[sector_idx].sector_addr + sizeof(sector_header_t) + 
-                         (KV_SECTOR_SIZE - sizeof(sector_header_t) - m_sector_desc_list[sector_idx].free_space);
-    
-    // 写入Flash
-    if (flash_port_write(write_addr, (uint8_t*)p, sizeof(KV_Record)) != EF_OK){
-        EFLASH_ASSERT(0);
-        return -1;
-    }
-    
-    // 保存原始状态
-    uint8_t original_status = m_sector_desc_list[sector_idx].attr.status;
-    
-    // 更新扇区信息
-    m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
-    m_sector_desc_list[sector_idx].record_count++;
-    m_sector_desc_list[sector_idx].free_space -= sizeof(KV_Record);
-
-    // 检查扇区是否已满
-    if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
-        m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FULL;
-    }
-    
-    // 只有状态改变时才写入Flash
-    if (m_sector_desc_list[sector_idx].attr.status != original_status) {
-        printf("original_sector_status:%d, new_sector_status:%d\n", original_status, m_sector_desc_list[sector_idx].attr.status);
-        if(_sector_header_write(sector_idx, m_sector_desc_list[sector_idx].attr.status, m_sector_desc_list[sector_idx].attr.role) != 0) {
-            return -1;
-        }
-    }
-		
-		// 返回绝对地址 ，必须是最后，不然中途失败了，外部又在用新地址就麻烦了
-    *p_addr_abs = write_addr;
-    return 0;
-}
-
-/**
- * @brief 写入记录到Flash（自动选择扇区）
- */
-static int _write_record(KV_Record *p, uint32_t *p_addr_abs) {
-    int sector_idx = 0;
-    
-restart_write:   
-    // 寻找有足够空间的可写入扇区
-    sector_idx = _find_writable_data_sector(sizeof(KV_Record));
-    if (sector_idx < 0) {
-        // 所有数据扇区都满了，需要GC
-        if (embedded_flash_gc() != 0) {
-            return -1;
-        }
-        goto restart_write;  // GC后重新寻找可写入扇区
-    }
-    
-    // 使用新的写入函数
-    return _write_record_to_sector(sector_idx, p, p_addr_abs);
-}
-
-static int _find_sector_role(uint8_t role) {
-    // 从最后一个扇区开始逆序查找
-    for (int i = KV_SECTOR_COUNT - 1; i >= 0; i--) {
-        if (m_sector_desc_list[i].attr.role == role) {  
-            return i;
-        }
-    }
-    return -1;  // 未找到
-}
-
-
-
-
-/**
- * @brief 检查记录是否有效
- */
-static bool _is_kv_record(const KV_Record *record) {
-    // 空指针检查
-    if (record == NULL) {
-        printf("_is_kv_record: NULL record pointer\n");
-        return false;
-    }
-    
-    if (record->magic != KV_HEADER_MAGIC) {
-        printf("_is_kv_record: Invalid magic=0x%02X, expected=0x%02X\n", record->magic, KV_HEADER_MAGIC);
-        return false;
-    }
-
-    if (record->value_length == 0 || record->value_length > KV_MAX_VALUE_SIZE) {
-        printf("_is_kv_record: Invalid value_length=%d, key=%d\n", record->value_length, record->key);
-        return false;
-    }
-
-    // 检查CRC - 跳过status_table(16) + magic(1) + data_type(1)，从key开始校验key + value_length + value
-    // 关键修复：使用固定长度KV_MAX_VALUE_SIZE而不是实际数据长度
-    uint16_t calc_crc = crc16_x25_calculate((uint8_t*)&record->key, 2 + KV_MAX_VALUE_SIZE);
-    if (calc_crc != record->crc) {
-        uint8_t record_status = (uint8_t)_get_kv_status_from_table((uint8_t*)record->status_table);
-        printf("_is_kv_record: CRC mismatch for key=%d, status:%d, value_length:%d, data_type:%d, calc_crc=0x%04X, stored_crc=0x%04X\n", 
-               record->key, record_status, record->value_length, record->data_type, calc_crc, record->crc);
-        return false;
-    }
-
-    return true;
-}
-
-
-
-/**
- * @brief 擦除扇区
- */
-static int _erase_sector(uint8_t sector_idx) {
-
-    printf("EmbeddedFlash: Erasing sector %d at address 0x%08X, size=%d\n", 
-            sector_idx, m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE);
-    if (flash_port_erase(m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE) == EF_OK) {
-            // 重置扇区信息
-            m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
-            m_sector_desc_list[sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);  // 减去扇区头大小
-            m_sector_desc_list[sector_idx].record_count = 0;
-            
-            #if EFLASH_ENABLE_ERASE_COUNTER
-            // 更新擦除统计信息
-            m_erase_stats.sector_erase_count[sector_idx]++;
-            m_erase_stats.total_erase_count++;
-            
-            // 更新最大擦除次数信息
-            if (m_erase_stats.sector_erase_count[sector_idx] > m_erase_stats.max_erase_count) {
-                m_erase_stats.max_erase_count = m_erase_stats.sector_erase_count[sector_idx];
-                m_erase_stats.max_erase_sector_idx = sector_idx;
-            }
-            #endif
-            return 0;  
-    }else{
-        printf("erase sector failed, sector_idx=%d\n", sector_idx);
-        EFLASH_ASSERT(0);
-        return -1;
-    }
-}
-
-
-
-/**
- * @brief 在kv_data_t列表中查找指定key的记录
- * @param key 要查找的键
- * @return 找到返回kv_data_t指针，未找到返回NULL
- */
-static kv_data_t* _find_kv_data(uint8_t key) {
-    if (mp_kv_list == NULL || m_kv_data_list_count == 0) {
-        return NULL;
-    }
-    
-    // 遍历kv_data_t列表查找匹配的key
-    for (int i = 0; i < m_kv_data_list_count; i++) {
-        if (mp_kv_list[i].key == key) {
-            return &mp_kv_list[i];  // 返回找到的记录的指针
-        }
-    }
-    
-    return NULL;  // 未找到
-}
-
-/**
- * @brief 执行GC操作（统一的数据迁移和角色切换逻辑）
- * @param gc_sector_pos GC扇区索引（GC_TEMP状态）
- * @param data_sector_pos 要处理的数据扇区索引（DATA_GCING状态）
- * @note 这是GC的核心实现，负责数据迁移和扇区角色切换
- * @note 采用断电安全的状态机设计，确保数据一致性
- * @note 支持中断恢复和正常GC两种模式
- * @return 0=成功, -1=失败
- */
-static int _execute_gc_operation(int gc_temp_sector_idx, int data_gcing_sector_idx, uint32_t gc_temp_empty_addr_abs, uint32_t data_gcing_resume_addr_abs) {
-    printf("Executing GC operation: GC Temp Sector=%d, Data GCing Sector=%d\n", gc_temp_sector_idx, data_gcing_sector_idx);
-    printf("GC Temp Empty Address=0x%x, Data GCing Resume Address=0x%x\n", gc_temp_empty_addr_abs, data_gcing_resume_addr_abs);
-    // 计算扫描地址和结束地址
-    uint32_t data_sector_scan_addr = data_gcing_resume_addr_abs;
-    uint32_t data_sector_end_addr = m_sector_desc_list[data_gcing_sector_idx].sector_addr + KV_SECTOR_SIZE;
-    
-    uint32_t gc_sector_scan_addr = gc_temp_empty_addr_abs;
-    uint32_t gc_sector_end_addr = m_sector_desc_list[gc_temp_sector_idx].sector_addr + KV_SECTOR_SIZE;
-    uint16_t gc_sector_status = EFLASH_SECTOR_STATUS_FREE;
-    // ==================== 数据迁移阶段 ====================
-    KV_Record record;  
-    printf("Starting data migration for GC\n");
-    while (data_sector_scan_addr + sizeof(KV_Record) < data_sector_end_addr) {//使用<=还是<
-        // 读取记录
-        memset(&record, 0, sizeof(KV_Record));
-        printf("GC: Reading record at address=0x%08X, size=%d\n", data_sector_scan_addr, sizeof(KV_Record));
-        if (flash_port_read(data_sector_scan_addr, (uint8_t*)&record, sizeof(KV_Record)) == EF_OK) {
-            // 调试：打印读取的记录信息
-            uint8_t record_status = (uint8_t)_get_kv_status_from_table(record.status_table);
-            printf("GC: Read record - magic=0x%02X, key=%d, status=%d, value_len=%d, data_type=%d, crc=0x%04X\n", 
-                   record.magic, record.key, record_status, record.value_length, record.data_type, record.crc);
-            
-            // 只处理有效的记录（EFLASH_KV_WRITE状态）
-            if (_is_kv_record(&record) && (record_status == EFLASH_KV_WRITE)) {
-                printf("Migrating record: Key=%d, Length=%d, Address=%lu\n", record.key, record.value_length, data_sector_scan_addr);
-                // 检查GC临时区空间是否足够
-                if (gc_sector_scan_addr + sizeof(KV_Record) > gc_sector_end_addr) {
-                    // GC临时区空间不足，退出循环
-                    printf("GC Temp sector full, stopping migration\n");
-                    gc_sector_status = EFLASH_SECTOR_STATUS_FULL;
-                    break;
-                } else {
-                    // GC临时区空间足够，执行原子迁移操作（使用状态表机制）
-                    printf("Writing to GC Temp sector at address=%lu\n", gc_sector_scan_addr);
-                    // 步骤1: 在GC临时区写入新副本（使用_kv_write_record分阶段提交）
-                    KV_Record new_rec = record;
-                    uint32_t new_rec_addr = 0; 
-                    if (_write_record_to_sector(gc_temp_sector_idx, &new_rec, &new_rec_addr) != 0) {
-                        return -1;
-                    }
-                    
-                    // 步骤2: 将新副本提交为WRITE状态（使用类型安全函数）
-                    if (_write_kv_status(new_rec_addr, EFLASH_KV_WRITE) != EF_OK) {
-                        EFLASH_ASSERT(0);
-                        return -1;
-                    }
-                    
-                    // 步骤3: 将原记录标记为DELETED状态（使用状态表机制）
-                    if (_kv_delete_record(data_sector_scan_addr) != EF_OK) {
-                        EFLASH_ASSERT(0);
-                        return -1;
-                    }
-                    
-                    // 更新GC临时区扫描地址
-                    gc_sector_scan_addr += sizeof(KV_Record);
-                    gc_sector_status = EFLASH_SECTOR_STATUS_USING;
-                } 
-            }else{
-							printf("gc invalid record,key:%d,status:%d,len:%d\n",record.key, record_status, record.value_length);
-						}
-           
-        } else {
-            printf("Failed to read record at address=%lu\n", data_sector_scan_addr);
-        }
-        // 读失败也推进，避免死循环
-        data_sector_scan_addr += sizeof(KV_Record);
-    }
-    // 检查扇区是否已满
-    if (m_sector_desc_list[gc_temp_sector_idx].free_space < sizeof(KV_Record)) {
-        gc_sector_status = EFLASH_SECTOR_STATUS_FULL;
-    }
-    // ==================== 扇区角色切换阶段 ====================
-    // 步骤1: 将原GC_TEMP扇区转为DATA扇区
-    int result = _sector_header_compare(gc_temp_sector_idx, gc_sector_status, EFLASH_SECTOR_ROLE_DATA);
-    if(result != 0) {
-        _sector_header_write(gc_temp_sector_idx, gc_sector_status, EFLASH_SECTOR_ROLE_DATA);
-    }
-    // 步骤2: 将被GC的数据扇区直接擦除并设为GC扇区
-    if (_erase_sector(data_gcing_sector_idx) != 0) {
-        return -1;
-    }
-    _sector_header_write(data_gcing_sector_idx, EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_GC);
-    
-    // 重置可用空间
-    m_sector_desc_list[data_gcing_sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);
-    m_sector_desc_list[data_gcing_sector_idx].record_count = 0;
-
-    // 关键：同步更新内存中的“当前GC扇区”和下一个数据扇区顺序，避免下一次GC立刻处理刚转换的DATA扇区
-    // 将新产生的GC扇区视为“尾部”，写入顺序应从它的下一个扇区开始
-    // 这里无需立即触发再次GC，返回由上层写流程按需触发
-
-    return 0;
-}
-
-/**
- * @brief 寻找可写入的数据扇区（有足够空间的）
- * @param required_space 需要的空间大小
- * @note 从GC区+1开始，按循环顺序查找可用的数据扇区
- * @note 这是循环存储模式的关键实现
- * @return 扇区索引，-1表示所有数据扇区都满了，需要GC
- */
-static int _find_writable_data_sector(uint16_t required_space) 
-{
-    int gc_sector = _find_sector_role(EFLASH_SECTOR_ROLE_GC);
-    if (gc_sector >= 0) {
-        // 遍历所有数据扇区，寻找有足够空间的扇区
-        // 从GC区+1开始，按循环顺序查找（循环存储模式）
-        for (int i = 0; i < (KV_SECTOR_COUNT - 1); i++) {
-            uint8_t pos = (gc_sector + 1 + i) % KV_SECTOR_COUNT; // 从第一个数据区开始查找
-            
-            // 检查扇区是否满足写入条件：
-            // 1. 有足够的空闲空间
-            // 2. 状态为USING或FREE（可以写入）
-            // 3. 角色为DATA（数据扇区）
-            if (m_sector_desc_list[pos].free_space >= required_space 
-                && (m_sector_desc_list[pos].attr.status == EFLASH_SECTOR_STATUS_USING
-                || m_sector_desc_list[pos].attr.status == EFLASH_SECTOR_STATUS_FREE)
-                && m_sector_desc_list[pos].attr.role == EFLASH_SECTOR_ROLE_DATA) {
-                return pos;  // 找到有足够空间的数据扇区
-            }
-        }
-    }
-    return -1;  // 所有数据扇区都满了，需要GC
-}
-
-/**
- * @brief 检查扇区头信息是否有效
- * @param header 扇区头信息指针
- * @return true=有效, false=无效
- */
-static bool _is_sector_header(const sector_header_t *header) {
-    if (header->magic != SECTOR_HEADER_MAGIC_WORD) {
-        return false;
-    }
-    return true;
-}
 
 /**
  * @brief 读取扇区头信息并解析状态
@@ -1512,260 +113,7 @@ static int _sector_header_read(uint8_t sector_idx, sector_header_t *header) {
     }
     return -1;
 }
-
-// /**
-//  * @brief 比较扇区头的状态信息
-//  * @param sector_idx 扇区索引
-//  * @param status 待比较的状态
-//  * @return 0=相同, -1=读取失败, -2=状态不同
-//  */
-// static int _sector_header_status_compare(uint8_t sector_idx, uint8_t status)
-// {
-//     sector_header_t current_header = {0};
-//     /* 尝试读取当前扇区头 */
-//     if (_sector_header_read(sector_idx, &current_header) == 0) {
-//         uint8_t current_status = _get_status(current_header.status_table, SECTOR_STATUS_NUM);
-//         if (current_status != status) {
-//             return -2;  // 状态不同
-//         }
-//         return 0;  // 状态相同
-//     } else {
-//         return -1;  // 读取失败或空扇区
-//     }
-// }
-
-// /**
-//  * @brief 比较扇区头的角色信息
-//  * @param sector_idx 扇区索引
-//  * @param role 待比较的角色
-//  * @return 0=相同, -1=读取失败, -3=角色不同
-//  */
-// static int _sector_header_role_compare(uint8_t sector_idx, uint8_t role)
-// {
-//     sector_header_t current_header = {0};
-//     /* 尝试读取当前扇区头 */
-//     if (_sector_header_read(sector_idx, &current_header) == 0) {
-//         uint8_t current_role = _get_status(current_header.role_table, SECTOR_ROLE_NUM);
-//         if (current_role != role) {
-//             return -3;  // 角色不同
-//         }
-//         return 0;  // 角色相同
-//     } else {
-//         return -1;  // 读取失败或空扇区
-//     }
-// }
-
-/**
- * @brief 扇区信息比对（同时比较状态和角色）
- * @param sector_idx 扇区索引
- * @param status 待比较的状态
- * @param role 待比较的角色
- * @return 0=都相同, -1=读取失败, -2=状态不同, -3=角色不同, -4=状态和角色都不同
- */
-static int _sector_header_compare(uint8_t sector_idx, uint8_t status, uint8_t role)
-{
-    sector_header_t current_header = {0};
-    /* 尝试读取当前扇区头 */
-    if (_sector_header_read(sector_idx, &current_header) == 0) {
-        uint8_t current_status = (uint8_t)_get_sector_status_from_table(current_header.status_table);
-        uint8_t current_role = (uint8_t)_get_sector_role_from_table(current_header.role_table);
-        if(current_status != status && current_role != role) {
-            return -4;
-        }
-        else if (current_status != status) {
-            return -2;
-        }
-        else if (current_role != role) {
-            return -3;
-        }
-        return 0;
-    }else{
-        //空扇区
-        return -1;
-    }
-}
-
-// /**
-//  * @brief 写入扇区头的状态信息
-//  * @param sector_idx 扇区索引
-//  * @param status 扇区状态
-//  * @return 0=成功, -1=失败
-//  * @note 如果扇区头不存在，会先创建完整的扇区头（使用当前RAM中的role）
-//  */
-// static int _sector_header_status_write(uint8_t sector_idx, uint8_t status)
-// {
-//     FlashErrCode result = FLASH_NO_ERR;
-    
-//     if (sector_idx >= KV_SECTOR_COUNT) {
-//         return -1;
-//     }
-
-//     uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
-//     sector_header_t current_header = {0};
-    
-//     /* 尝试读取当前扇区头 */
-//     if (_sector_header_read(sector_idx, &current_header) == 0) {
-//         /* 扇区头已存在，使用状态表机制更新状态 */
-//         uint8_t status_table[SECTOR_STATUS_TABLE_SIZE];
-        
-//         /* 更新状态 */
-//         result = _write_status(addr, status_table, SECTOR_STATUS_NUM, status);
-//         if (result != FLASH_NO_ERR) {
-//             EFLASH_ASSERT(0);
-//             return -1;
-//         }
-//         m_sector_desc_list[sector_idx].attr.status = status;
-//         return 0;
-//     } else {
-//         /* 扇区头不存在，创建新的扇区头（使用RAM中的role） */
-//         sector_header_t header;
-//         memset(&header, 0xFF, sizeof(sector_header_t));
-        
-//         /* 设置状态表和角色表 */
-//         _set_status(header.status_table, SECTOR_STATUS_NUM, status);
-//         _set_status(header.role_table, SECTOR_ROLE_NUM, m_sector_desc_list[sector_idx].attr.role);
-        
-//         /* 设置魔术字 */
-//         header.magic = SECTOR_HEADER_MAGIC_WORD;
-//         header.reserved = 0xFFFFFFFF;
-        
-//         /* 写入完整扇区头 */
-//         result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
-//         if (result == FLASH_NO_ERR) {
-//             m_sector_desc_list[sector_idx].attr.status = status;
-//             return 0;
-//         }
-//     }
-    
-//     EFLASH_ASSERT(0);
-//     return -1;
-// }
-
-// /**
-//  * @brief 写入扇区头的角色信息
-//  * @param sector_idx 扇区索引
-//  * @param role 扇区角色
-//  * @return 0=成功, -1=失败
-//  * @note 如果扇区头不存在，会先创建完整的扇区头（使用当前RAM中的status）
-//  */
-// static int _sector_header_role_write(uint8_t sector_idx, uint8_t role)
-// {
-//     FlashErrCode result = FLASH_NO_ERR;
-    
-//     if (sector_idx >= KV_SECTOR_COUNT) {
-//         return -1;
-//     }
-
-//     uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
-//     sector_header_t current_header = {0};
-    
-//     /* 尝试读取当前扇区头 */
-//     if (_sector_header_read(sector_idx, &current_header) == 0) {
-//         /* 扇区头已存在，使用状态表机制更新角色 */
-//         uint8_t role_table[SECTOR_ROLE_TABLE_SIZE];
-        
-//         /* 更新角色 */
-//         result = _write_status(addr + SECTOR_STATUS_TABLE_SIZE, role_table, SECTOR_ROLE_NUM, role);
-//         if (result != FLASH_NO_ERR) {
-//             EFLASH_ASSERT(0);
-//             return -1;
-//         }
-//         m_sector_desc_list[sector_idx].attr.role = role;
-//         return 0;
-//     } else {
-//         /* 扇区头不存在，创建新的扇区头（使用RAM中的status） */
-//         sector_header_t header;
-//         memset(&header, 0xFF, sizeof(sector_header_t));
-        
-//         /* 设置状态表和角色表 */
-//         _set_status(header.status_table, SECTOR_STATUS_NUM, m_sector_desc_list[sector_idx].attr.status);
-//         _set_status(header.role_table, SECTOR_ROLE_NUM, role);
-        
-//         /* 设置魔术字 */
-//         header.magic = SECTOR_HEADER_MAGIC_WORD;
-//         header.reserved = 0xFFFFFFFF;
-        
-//         /* 写入完整扇区头 */
-//         result = flash_port_write(addr, (uint32_t*)&header, sizeof(sector_header_t));
-//         if (result == FLASH_NO_ERR) {
-//             m_sector_desc_list[sector_idx].attr.role = role;
-//             return 0;
-//         }
-//     }
-    
-//     EFLASH_ASSERT(0);
-//     return -1;
-// }
-
-/**
- * @brief 写入扇区头信息（同时写入状态和角色）
- * @param sector_idx 扇区索引
- * @param status 扇区状态
- * @param role 扇区角色
- * @return 0=成功, -1=失败
- */
-static int _sector_header_write(uint8_t sector_idx, uint8_t status, uint8_t role)
-{
-    EF_ErrCode result = EF_OK;
-    
-    if (sector_idx >= KV_SECTOR_COUNT) {
-        return -1;
-    }
-
-    uint32_t addr = m_sector_desc_list[sector_idx].sector_addr;
-    sector_header_t last_header = {0};
-    /* 尝试读取当前扇区头 */
-    if (_sector_header_read(sector_idx, &last_header) == 0) {
-        uint8_t last_status = (uint8_t)_get_sector_status_from_table(last_header.status_table);
-        if (last_status == status || last_status > status) {
-            printf("status:%d -> %d\r\n", last_status, status);
-        }else{
-            /* 扇区头已存在，使用类型安全函数更新状态 */
-            result = _write_sector_status(addr, (EmbeddedFlash_sector_status_e)status);
-        if (result != EF_OK) {
-                EFLASH_ASSERT(0);
-                return -1;
-            }
-            m_sector_desc_list[sector_idx].attr.status = status;
-        }
-        
-    
-        uint8_t last_role = (uint8_t)_get_sector_role_from_table(last_header.role_table);
-        if (last_role == role || last_role > role) {
-            printf("role:%d -> %d\r\n", last_role, role);
-        }else{
-            /* 扇区头已存在，使用类型安全函数更新角色 */
-            result = _write_sector_role(addr, (EmbeddedFlash_sector_role_e)role);
-        if (result != EF_OK) {
-                EFLASH_ASSERT(0);
-                return -1;
-            }
-            m_sector_desc_list[sector_idx].attr.role = role;
-        }
-        
-        return 0;
-    } else {
-        /* 扇区头不存在（擦除后第一次写入），创建新的扇区头 */
-        sector_header_t new_header;
-        memset(&new_header, 0xFF, sizeof(sector_header_t));
-        _set_sector_status_table(new_header.status_table, (EmbeddedFlash_sector_status_e)status);
-        _set_sector_role_table(new_header.role_table, (EmbeddedFlash_sector_role_e)role);
-        new_header.magic = SECTOR_HEADER_MAGIC_WORD;
-        new_header.reserved = 0xFFFFFFFF;
-        result = flash_port_write(addr, (uint8_t*)&new_header, sizeof(sector_header_t));
-        if (result == EF_OK) {
-            m_sector_desc_list[sector_idx].attr.status = status;
-            m_sector_desc_list[sector_idx].attr.role = role;
-            return 0;
-        }
-    }
-    
-    EFLASH_ASSERT(0);
-    return -1;
-}
-
-
-static embedded_flash_status_t embedded_flash_get_status(void)
+static embedded_flash_att_status_t embedded_flash_get_attr_status(void)
 {
 	uint8_t gc_cnt = 0;
 	uint8_t gc_temp_cnt = 0;
@@ -2160,5 +508,1076 @@ static EmbeddedFlash_sector_role_e _get_sector_role_from_table(uint8_t role_tabl
 }
 
 
+
+
+/***** v2 开始 *****/
+
+// 获取数据类型的固定长度
+uint8_t embedded_flash_get_type_size(EmbeddedFlash_data_type_e data_type) 
+{
+    switch (data_type) {
+        case EFLASH_FORMAT_BOOL:
+        case EFLASH_FORMAT_UINT8:
+        case EFLASH_FORMAT_INT8:
+            return 1;
+        case EFLASH_FORMAT_UINT16:
+        case EFLASH_FORMAT_INT16:
+            return 2;
+        case EFLASH_FORMAT_FLOAT:
+        case EFLASH_FORMAT_UINT32:
+        case EFLASH_FORMAT_INT32:
+            return 4;
+        case EFLASH_FORMAT_UINT64:
+        case EFLASH_FORMAT_INT64:
+            return 8;
+        case EFLASH_FORMAT_STRING:
+        case EFLASH_FORMAT_HEX:
+            return 0; // 可变长度，需要用户指定
+        default:
+            return 0;
+    }
+}
+
+
+
+/**
+ * @brief 写入记录到指定扇区
+ * @param sector_idx 目标扇区索引
+ * @param p KV记录指针
+ * @return 写入地址(成功)，0(失败)
+ */
+static uint32_t _write_kv_record_to_sector(uint8_t sector_idx, KV_Record *p) 
+{
+    // 计算写入地址 = 扇区起始地址 + 扇区头大小 + 已使用空间
+    uint32_t write_addr = m_sector_desc_list[sector_idx].sector_addr + sizeof(sector_header_t) + 
+                         (KV_SECTOR_SIZE - sizeof(sector_header_t) - m_sector_desc_list[sector_idx].free_space);
+    
+    // 写入Flash
+    if (flash_port_write(write_addr, (uint8_t*)p, sizeof(KV_Record)) != EF_OK){
+        EFLASH_ASSERT(0);
+        return 0;  // 返回0表示失败
+    }
+    
+    // 保存原始状态
+    uint8_t original_status = m_sector_desc_list[sector_idx].attr.status;
+    
+    // 更新扇区信息
+    m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
+    m_sector_desc_list[sector_idx].record_count++;
+    m_sector_desc_list[sector_idx].free_space -= sizeof(KV_Record);
+
+    // 检查扇区是否已满
+    if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
+        m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FULL;
+    }
+    
+    // 只有状态改变时才写入扇区头（状态/角色）
+    if (m_sector_desc_list[sector_idx].attr.status != original_status) {
+        printf("original_sector_status:%d, new_sector_status:%d\n", original_status, m_sector_desc_list[sector_idx].attr.status);
+        if (_write_sector_status(m_sector_desc_list[sector_idx].sector_addr, (EmbeddedFlash_sector_status_e)m_sector_desc_list[sector_idx].attr.status) != EF_OK) {
+            return 0;
+        }
+        if (_write_sector_role(m_sector_desc_list[sector_idx].sector_addr, (EmbeddedFlash_sector_role_e)m_sector_desc_list[sector_idx].attr.role) != EF_OK) {
+            return 0;
+        }
+    }
+    return write_addr;
+}
+
+/**
+ * @brief 写入记录到指定扇区
+ * @param sector_idx 目标扇区索引
+ * @param p KV记录指针
+ * @param p_addr_abs_offset 返回写入的绝对偏移地址
+ * @return 0=成功, -1=失败
+ */
+static int _write_record_to_sector(uint8_t sector_idx, KV_Record *p, uint32_t *p_addr_abs) {
+    if (sector_idx >= KV_SECTOR_COUNT || p == NULL || p_addr_abs == NULL) {
+        return -1;
+    }
+    
+    // 检查扇区是否有足够空间
+    if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
+        return -1;  // 空间不足
+    }
+    
+    // 计算写入地址 = 扇区起始地址 + 扇区头大小 + 已使用空间
+    uint32_t write_addr = m_sector_desc_list[sector_idx].sector_addr + sizeof(sector_header_t) + 
+                         (KV_SECTOR_SIZE - sizeof(sector_header_t) - m_sector_desc_list[sector_idx].free_space);
+    
+    // 写入Flash
+    if (flash_port_write(write_addr, (uint8_t*)p, sizeof(KV_Record)) != EF_OK){
+        EFLASH_ASSERT(0);
+        return -1;
+    }
+    
+    // 保存原始状态
+    uint8_t original_status = m_sector_desc_list[sector_idx].attr.status;
+    
+    // 更新扇区信息
+    m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
+    m_sector_desc_list[sector_idx].record_count++;
+    m_sector_desc_list[sector_idx].free_space -= sizeof(KV_Record);
+
+    // 检查扇区是否已满
+    if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
+        m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FULL;
+    }
+    
+    // 只有状态改变时才写入扇区头（状态/角色）
+    if (m_sector_desc_list[sector_idx].attr.status != original_status) {
+        printf("original_sector_status:%d, new_sector_status:%d\n", original_status, m_sector_desc_list[sector_idx].attr.status);
+        if (_write_sector_status(m_sector_desc_list[sector_idx].sector_addr, (EmbeddedFlash_sector_status_e)m_sector_desc_list[sector_idx].attr.status) != EF_OK) {
+            return -1;
+        }
+        if (_write_sector_role(m_sector_desc_list[sector_idx].sector_addr, (EmbeddedFlash_sector_role_e)m_sector_desc_list[sector_idx].attr.role) != EF_OK) {
+            return -1;
+        }
+    }
+		
+		// 返回绝对地址 ，必须是最后，不然中途失败了，外部又在用新地址就麻烦了
+    *p_addr_abs = write_addr;
+    return 0;
+}
+
+/**
+ * @brief 寻找可写入的数据扇区（有足够空间的）
+ * @param required_space 需要的空间大小
+ * @note 从GC区+1开始，按循环顺序查找可用的数据扇区
+ * @note 这是循环存储模式的关键实现
+ * @return 扇区索引，-1表示所有数据扇区都满了，需要GC
+ */
+static int _find_writable_data_sector(uint16_t required_space) 
+{
+    int gc_sector = _find_sector_role(EFLASH_SECTOR_ROLE_GC);
+    if (gc_sector >= 0) {
+        // 遍历所有数据扇区，寻找有足够空间的扇区
+        // 从GC区+1开始，按循环顺序查找（循环存储模式）
+        for (int i = 0; i < (KV_SECTOR_COUNT - 1); i++) {
+            uint8_t pos = (gc_sector + 1 + i) % KV_SECTOR_COUNT; // 从第一个数据区开始查找
+            
+            // 检查扇区是否满足写入条件：
+            // 1. 有足够的空闲空间
+            // 2. 状态为USING或FREE（可以写入）
+            // 3. 角色为DATA（数据扇区）
+            if (m_sector_desc_list[pos].free_space >= required_space 
+                && (m_sector_desc_list[pos].attr.status == EFLASH_SECTOR_STATUS_USING
+                || m_sector_desc_list[pos].attr.status == EFLASH_SECTOR_STATUS_FREE)
+                && m_sector_desc_list[pos].attr.role == EFLASH_SECTOR_ROLE_DATA) {
+                return pos;  // 找到有足够空间的数据扇区
+            }
+        }
+    }
+    return -1;  // 所有数据扇区都满了，需要GC
+}
+static uint32_t _write_kv_record(KV_Record *p) 
+{
+    int sector_idx = 0;
+restart_write:   
+    // 寻找有足够空间的可写入扇区
+    sector_idx = _find_writable_data_sector(sizeof(KV_Record));
+    if (sector_idx < 0) {
+        // 所有数据扇区都满了，需要GC
+        if (ef_embedded_flash_gc() != EF_OK) {
+            return 0;  // 返回0表示失败
+        }
+        goto restart_write;  // GC后重新寻找可写入扇区
+    }
+    
+    // 使用新的写入函数
+    return _write_kv_record_to_sector(sector_idx, p);
+}
+
+
+/**
+ * @brief 擦除扇区
+ */
+static EF_ErrCode _erase_sector(uint8_t sector_idx) {
+
+    printf("EmbeddedFlash: Erasing sector %d at address 0x%08X, size=%d\n", 
+            sector_idx, m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE);
+    if (flash_port_erase(m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE) == EF_OK) {
+            // 重置扇区信息
+            m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
+            m_sector_desc_list[sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);  // 减去扇区头大小
+            m_sector_desc_list[sector_idx].record_count = 0;
+            
+            #if EFLASH_ENABLE_ERASE_COUNTER
+            // 更新擦除统计信息
+            m_erase_stats.sector_erase_count[sector_idx]++;
+            m_erase_stats.total_erase_count++;
+            
+            // 更新最大擦除次数信息
+            if (m_erase_stats.sector_erase_count[sector_idx] > m_erase_stats.max_erase_count) {
+                m_erase_stats.max_erase_count = m_erase_stats.sector_erase_count[sector_idx];
+                m_erase_stats.max_erase_sector_idx = sector_idx;
+            }
+            #endif
+            return EF_OK;  
+    }else{
+        printf("erase sector failed, sector_idx=%d\n", sector_idx);
+        EFLASH_ASSERT(0);
+        return EF_ERR_ERASE;
+    }
+}
+
+/* 初始化扇区头 */
+static EF_ErrCode _init_all_sector_attr(void)
+{
+	for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
+        //擦除扇区
+        EF_ErrCode ret = _erase_sector(i);
+        //写入新的头信息
+        if(i == KV_SECTOR_COUNT-1) {
+            //GC区
+            ret |= _write_sector_status(m_sector_desc_list[i].sector_addr, EFLASH_SECTOR_STATUS_FREE);
+            ret |= _write_sector_role(m_sector_desc_list[i].sector_addr, EFLASH_SECTOR_ROLE_GC);
+        }else{
+            //数据区
+            ret |= _write_sector_status(m_sector_desc_list[i].sector_addr, EFLASH_SECTOR_STATUS_USING);
+            ret |= _write_sector_role(m_sector_desc_list[i].sector_addr, EFLASH_SECTOR_ROLE_DATA);
+        }
+        if(ret != EF_OK){return ret;}
+	}	
+    return EF_OK;
+}
+
+/* 初始化KV记录 */
+static EF_ErrCode _init_all_kv_record(void)
+{
+
+    for (int i = 0; i < m_kv_data_list_count; i++) {
+        if (mp_kv_list[i].data_source == KV_DATA_SOURCE_DEFAULT) {
+            // 构造默认值记录
+            KV_Record record={0};
+            record.magic = KV_HEADER_MAGIC;
+            _set_kv_status_table(record.status_table, EFLASH_KV_PRE_WRITE);
+            record.data_type = mp_kv_list[i].data_type;
+            record.key = mp_kv_list[i].key;
+            record.value_length = mp_kv_list[i].value_length;
+            
+            // 检查边界，防止数组越界
+            if (mp_kv_list[i].value_length > KV_MAX_VALUE_SIZE) {
+                printf("CRITICAL: default value_length=%d exceeds KV_MAX_VALUE_SIZE=%d for key=%d\n", 
+                       mp_kv_list[i].value_length, KV_MAX_VALUE_SIZE, mp_kv_list[i].key);
+                return EF_ERR_PARAM;
+            }
+            
+            memset(record.value, 0, KV_MAX_VALUE_SIZE);
+            memcpy(record.value, mp_kv_list[i].value, mp_kv_list[i].value_length);
+            // 计算CRC - 跳过status_table(16) + magic(1) + data_type(1)，从key开始
+            record.crc = crc16_x25_calculate((uint8_t*)&record.key, 2 + KV_MAX_VALUE_SIZE);
+            
+            // 写入记录（使用状态表机制）
+            uint32_t write_addr_abs = _write_kv_record(&record);
+            if(write_addr_abs == 0 ){
+                return EF_ERR_WRITE;
+            }
+            
+            // 使用类型安全函数标记为WRITE状态
+            if(_write_kv_status(write_addr_abs, EFLASH_KV_WRITE) != EF_OK){
+                printf("Failed to set WRITE status for key=%d at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
+                EFLASH_ASSERT(0);
+                return EF_ERR_WRITE;
+            }
+            
+            // 更新RAM中的状态
+            mp_kv_list[i].addr_abs = write_addr_abs;
+            mp_kv_list[i].data_source = KV_DATA_SOURCE_FIRST_WRITE;
+            
+            printf("Initialized default value for key=%d at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
+        }
+    }
+
+    return EF_OK;
+}
+
+
+/**
+ * @brief 检查记录是否有效
+ */
+static EmbeddedFlash_record_status_e _is_kv_record(const KV_Record *record) {
+    // 空指针检查
+    if (record == NULL) {
+        printf("_is_kv_record: NULL record pointer\n");
+        return EFLASH_KV_UNUSED;
+    }
+    
+    if (record->magic != KV_HEADER_MAGIC) {
+        printf("_is_kv_record: Invalid magic=0x%02X, expected=0x%02X\n", record->magic, KV_HEADER_MAGIC);
+        return EFLASH_KV_UNUSED;
+    }
+
+    if (record->value_length == 0 || record->value_length > KV_MAX_VALUE_SIZE) {
+        printf("_is_kv_record: Invalid value_length=%d, key=%d\n", record->value_length, record->key);
+        return EFLASH_KV_UNUSED;
+    }
+
+    // 检查CRC - 跳过status_table(16) + magic(1) + data_type(1)，从key开始校验key + value_length + value
+    // 关键修复：使用固定长度KV_MAX_VALUE_SIZE而不是实际数据长度
+    uint16_t calc_crc = crc16_x25_calculate((uint8_t*)&record->key, 2 + KV_MAX_VALUE_SIZE);
+    if (calc_crc != record->crc) {
+        //crc不匹配，记录无效
+        printf("_is_kv_record: CRC mismatch for key=%d, calc_crc=0x%04X, stored_crc=0x%04X\n", record->key, calc_crc, record->crc);
+        return EFLASH_KV_UNUSED;
+    }
+    uint8_t record_status = (uint8_t)_get_kv_status_from_table((uint8_t*)record->status_table);
+
+    return record_status;
+}
+
+/**
+ * @brief 检查扇区头信息是否有效
+ * @param header 扇区头信息指针
+ * @return true=有效, false=无效
+ */
+ static bool _is_sector_header(const sector_header_t *header)
+{
+    if (header->magic != SECTOR_HEADER_MAGIC_WORD) {
+        return false;
+    }
+    return true;
+}
+/* 迭代 */
+static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_addr))
+{
+    for(uint8_t sector_idx = 0; sector_idx < KV_SECTOR_COUNT; sector_idx++){
+        //初始化扇区信息
+        uint16_t record_count = 0;
+        uint16_t free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);
+        
+        //读取扇区头
+        sector_header_t header = {0};
+        if(flash_port_read(m_sector_desc_list[sector_idx].sector_addr, (uint8_t*)&header, sizeof(sector_header_t)) != EF_OK){
+            printf("Failed to read sector header at addr=0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
+            return EF_ERR_READ;
+        }
+        if(_is_sector_header(&header) == false){
+            printf("Invalid sector header at addr=0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
+            return EF_ERR_INVALID;
+        }
+        uint8_t sector_status = (uint8_t)_get_sector_status_from_table(header.status_table);
+        uint8_t sector_role = (uint8_t)_get_sector_role_from_table(header.role_table);
+        
+        // 扫描当前扇区的所有记录
+        uint32_t scan_addr = m_sector_desc_list[sector_idx].sector_addr + sizeof(sector_header_t);
+        uint32_t sector_end_addr = m_sector_desc_list[sector_idx].sector_addr + KV_SECTOR_SIZE;
+        
+        while (scan_addr + sizeof(KV_Record) < sector_end_addr) {//使用<=还是<
+            KV_Record record ={0};
+            // 读取完整记录
+            if (flash_port_read(scan_addr, (uint8_t*)&record, sizeof(KV_Record)) == EF_OK) {
+                // 检查记录基本有效性（magic、CRC等）
+                if (_is_kv_record(&record) != EFLASH_KV_UNUSED) {
+                    if(func != NULL){
+                        func(&record, scan_addr);
+                    }
+                    record_count++;
+                } else {
+                    // 检查是否是全0xFF区域（空白区域）
+                    uint8_t all_0xff = 1;
+                    uint8_t *record_bytes = (uint8_t*)&record;
+                    for (int k = 0; k < sizeof(KV_Record); k++) {
+                        if (record_bytes[k] != 0xFF) {
+                            all_0xff = 0;
+                            break;//跳出for循环
+                        }
+                    }
+                    if (all_0xff) {
+                        // 遇到全0xFF区域，说明后面都是空白区域
+                        break;
+                    } /*else {
+                        // 无效数据但不是全0xFF，标记为无效（写入全0）
+                        memset(&record, 0, sizeof(KV_Record));
+                        drv_flash_write(scan_addr, (uint8_t*)&record, sizeof(KV_Record));
+                    }*///不清0
+                }
+            }
+            //成功失败都继续推进，避免死循环
+            scan_addr += sizeof(KV_Record);
+        }
+
+        // 更新扇区状态信息
+        m_sector_desc_list[sector_idx].free_space = sector_end_addr - scan_addr;
+        m_sector_desc_list[sector_idx].record_count = record_count;
+
+        m_sector_desc_list[sector_idx].attr.status = sector_status;//这个状态会根据记录数和剩余空间更新
+        m_sector_desc_list[sector_idx].attr.role = sector_role;//这个角色不会改变
+        // 设置扇区状态
+        if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
+            m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FULL;
+        } else if (record_count > 0) {
+            m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
+        } else {
+            m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
+        }
+        //更新扇区头
+        if(m_sector_desc_list[sector_idx].attr.status != sector_status){
+            _write_sector_status(m_sector_desc_list[sector_idx].sector_addr, m_sector_desc_list[sector_idx].attr.status);
+        }
+    }
+    return EF_OK;
+}
+
+
+
+/**
+ * @brief 在kv_data_t列表中查找指定key的记录
+ * @param key 要查找的键
+ * @return 找到返回kv_data_t指针，未找到返回NULL
+ */
+static kv_data_t* _find_kv_data(uint8_t key) {
+    if (mp_kv_list == NULL || m_kv_data_list_count == 0) {
+        return NULL;
+    }
+    
+    // 遍历kv_data_t列表查找匹配的key
+    for (int i = 0; i < m_kv_data_list_count; i++) {
+        if (mp_kv_list[i].key == key) {
+            return &mp_kv_list[i];  // 返回找到的记录的指针
+        }
+    }
+    
+    return NULL;  // 未找到
+}
+
+static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr)
+{
+    uint8_t record_status = (uint8_t)_get_kv_status_from_table((uint8_t*)record->status_table);
+    if(record_status == EFLASH_KV_DELETED
+    || record_status == EFLASH_KV_PRE_DELETE) {
+        //无效记录
+        return EF_ERR;
+    }
+
+    //查找对应的kv_data_t
+    kv_data_t *p_kv_data = _find_kv_data(record->key);
+    if(p_kv_data == NULL){
+        return EF_ERR_INVALID;
+    }
+    
+    p_kv_data->addr_abs = abs_addr;
+    p_kv_data->data_type = record->data_type;
+    p_kv_data->value_length = record->value_length;
+    if(record->value_length > KV_MAX_VALUE_SIZE){
+        return EF_ERR_SIZE_TOO_LONG;
+    }
+    memcpy(p_kv_data->value, record->value, record->value_length);
+    p_kv_data->data_source = KV_DATA_SOURCE_FLASH_READ;
+    return EF_OK;
+}
+/* 加载kv记录*/
+EF_ErrCode _load_kv_record(void)
+{
+    return _iteration(_load_kv_record_callback);
+}
+
+/**
+ * @brief 将源扇区的PRE_WRITE和WRITE数据搬运到目标扇区，搬运完成后将源扇区的数据标记为删除
+ * @param source_sector_idx 源扇区索引
+ * @param target_sector_idx 目标扇区索引
+ * @return EF_ErrCode 错误码，EF_OK表示成功
+ * @note 此函数会：
+ *       1. 遍历源扇区的所有记录
+ *       2. 查找状态为PRE_WRITE或WRITE的记录
+ *       3. 将这些记录写入目标扇区
+ *       4. 将源扇区中的原记录标记为DELETED
+ */
+static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target_sector_idx)
+{
+    if (source_sector_idx >= KV_SECTOR_COUNT || target_sector_idx >= KV_SECTOR_COUNT) {
+        printf("Invalid sector index: source=%d, target=%d\n", source_sector_idx, target_sector_idx);
+        return EF_ERR_PARAM;
+    }
+    
+    printf("Migrating data from source sector %d to target sector %d\n", source_sector_idx, target_sector_idx);
+    
+    // 计算源扇区的扫描地址范围
+    uint32_t source_sector_start_addr = m_sector_desc_list[source_sector_idx].sector_addr + sizeof(sector_header_t);
+    uint32_t source_sector_end_addr = m_sector_desc_list[source_sector_idx].sector_addr + KV_SECTOR_SIZE;
+    
+    // 检查目标扇区是否有足够空间（至少需要能写入一个记录的空间）
+    if (m_sector_desc_list[target_sector_idx].free_space < sizeof(KV_Record)) {
+        printf("Target sector %d has insufficient space: %d bytes\n", 
+               target_sector_idx, m_sector_desc_list[target_sector_idx].free_space);
+        return EF_ERR_NO_SPACE;
+    }
+    
+    // 遍历源扇区的所有记录
+    uint16_t migrated_count = 0;
+    uint16_t deleted_count = 0;
+    
+    while (source_sector_start_addr + sizeof(KV_Record) < source_sector_end_addr) {
+        KV_Record record = {0};
+        
+        // 读取记录
+        if (flash_port_read(source_sector_start_addr, (uint8_t*)&record, sizeof(KV_Record)) != EF_OK) {
+            printf("Failed to read record at address 0x%08X\n", source_sector_start_addr);
+            source_sector_start_addr += sizeof(KV_Record);
+            continue;
+        }
+        
+        // 检查是否是有效的KV记录
+        EmbeddedFlash_record_status_e record_status = _is_kv_record(&record);
+        if (record_status == EFLASH_KV_UNUSED) {
+            // 检查是否是全0xFF区域（空白区域）
+            uint8_t all_0xff = 1;
+            uint8_t *record_bytes = (uint8_t*)&record;
+            for (int k = 0; k < sizeof(KV_Record); k++) {
+                if (record_bytes[k] != 0xFF) {
+                    all_0xff = 0;
+                    break;
+                }
+            }
+            if (all_0xff) {
+                // 遇到全0xFF区域，说明后面都是空白区域，可以停止遍历
+                break;
+            }
+            // 无效记录但不是全0xFF，跳过
+            source_sector_start_addr += sizeof(KV_Record);
+            continue;
+        }
+        
+        // 只处理PRE_WRITE和WRITE状态的记录
+        if (record_status == EFLASH_KV_PRE_WRITE || record_status == EFLASH_KV_WRITE) {
+            printf("Found record to migrate: key=%d, status=%d, addr=0x%08X\n", 
+                   record.key, record_status, source_sector_start_addr);
+            
+            // 检查目标扇区是否有足够空间
+            if (m_sector_desc_list[target_sector_idx].free_space < sizeof(KV_Record)) {
+                printf("Target sector %d is full, cannot migrate more records\n", target_sector_idx);
+                return EF_ERR_NO_SPACE;
+            }
+            
+            // 准备写入到目标扇区的记录（保持原状态）
+            KV_Record new_record = record;
+            // 重置状态表，准备写入PRE_WRITE状态
+            memset(new_record.status_table, 0xFF, KV_STATUS_TABLE_SIZE);
+            _set_kv_status_table(new_record.status_table, EFLASH_KV_PRE_WRITE);
+            
+            // 写入到目标扇区
+            uint32_t new_record_addr = 0;
+            if (_write_record_to_sector(target_sector_idx, &new_record, &new_record_addr) != 0) {
+                printf("Failed to write record to target sector %d\n", target_sector_idx);
+                return EF_ERR_WRITE;
+            }
+            
+            // 将新记录标记为WRITE状态
+            if (_write_kv_status(new_record_addr, EFLASH_KV_WRITE) != EF_OK) {
+                printf("Failed to set WRITE status for migrated record at 0x%08X\n", new_record_addr);
+                EFLASH_ASSERT(0);
+                return EF_ERR_WRITE;
+            }
+            
+            // 将源扇区中的原记录标记为删除
+            if (_kv_delete_record(source_sector_start_addr) != EF_OK) {
+                printf("Failed to delete original record at 0x%08X\n", source_sector_start_addr);
+                EFLASH_ASSERT(0);
+                return EF_ERR_WRITE;
+            }
+            
+            printf("Record migrated: key=%d, from 0x%08X to 0x%08X\n", 
+                   record.key, source_sector_start_addr, new_record_addr);
+            migrated_count++;
+            deleted_count++;
+            printf("Original record at 0x%08X marked as DELETED\n", source_sector_start_addr);
+        }
+        
+        // 继续扫描下一个记录
+        source_sector_start_addr += sizeof(KV_Record);
+    }
+    printf("Migration completed: %d records migrated, %d records deleted\n", 
+           migrated_count, deleted_count);
+    
+    return EF_OK;
+}
+
+/* 重建扇区信息 */ 
+EF_ErrCode _rebuild_sector(void)
+{
+    /* 重建扇区的目的就是让整个持久化存储组件中只有一个gc扇区其余全是数据区，这个过程可能涉及到数据的搬运 */
+    
+
+    /*1、找到一个剩余空间最多的扇区*/
+    uint16_t max_free_space = 0;
+    uint8_t start_sector_idx = 0;
+    for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
+        if(m_sector_desc_list[i].free_space > max_free_space){
+            max_free_space = m_sector_desc_list[i].free_space;
+            start_sector_idx = i;
+        }
+    }
+    /*2、将下一个扇区的数据挪到剩余空间最多的扇区，重复KV_SECTOR_COUNT次 */
+    for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
+        uint8_t next_sector_idx = (start_sector_idx + i + 1) % KV_SECTOR_COUNT;
+        //开始搬运
+        // 将源扇区(next_sector_idx)的数据搬运到目标扇区(start_sector_idx)
+        if (_migrate_sector_data(next_sector_idx, start_sector_idx) != EF_OK) {
+            printf("Failed to migrate data from source sector %d to target sector %d\n", 
+                   next_sector_idx, start_sector_idx);
+            return EF_ERR;
+        }
+        start_sector_idx = next_sector_idx;
+        //搬运完擦除扇区
+        EF_ErrCode ret = _erase_sector(next_sector_idx);
+        //写入新的头信息
+        if(i == KV_SECTOR_COUNT-1) {
+            //GC区
+            ret |= _write_sector_status(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_FREE);
+            ret |= _write_sector_role(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_GC);
+        }else{
+            //数据区
+            ret |= _write_sector_status(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_USING);
+            ret |= _write_sector_role(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_DATA);
+        }
+        if(ret != EF_OK){return ret;}
+    }
+    return EF_OK;
+}
+
+//查找指定扇区角色
+static int _find_sector_role(uint8_t role)
+{
+    for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
+        if(m_sector_desc_list[i].attr.role == role){
+            return i;
+        }
+    }
+    return -1;
+}
+/* GC操作 */
+EF_ErrCode ef_embedded_flash_gc(void)
+{
+    embedded_flash_att_status_t status = embedded_flash_get_attr_status();
+    if(status != EFLASH_STATUS_NORMAL){
+        return EF_ERR_NOT_INIT;
+    }
+    /* 将gc区的数据搬运到第一个数据区 */
+   
+    //1、查找gc区位置和第一个数据区位置
+    int gc_sector_idx = _find_sector_role(EFLASH_SECTOR_ROLE_GC);
+    if(gc_sector_idx < 0){
+        return EF_ERR_NOT_FOUND;
+    }
+    int data_sector_idx = (gc_sector_idx + 1) % KV_SECTOR_COUNT;
+
+    //2、进入gc状态
+    if(_write_sector_role(m_sector_desc_list[gc_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_GC_TEMP) != EF_OK){
+        return EF_ERR;
+    }
+    m_sector_desc_list[gc_sector_idx].attr.role = EFLASH_SECTOR_ROLE_GC_TEMP;
+    
+    if(_write_sector_role(m_sector_desc_list[data_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_DATA_GCING) != EF_OK){
+        return EF_ERR;
+    }
+    m_sector_desc_list[data_sector_idx].attr.role = EFLASH_SECTOR_ROLE_DATA_GCING;
+    
+    //3、将第一个数据区的数据搬运到gc区
+    if(_migrate_sector_data(data_sector_idx, gc_sector_idx) != EF_OK){
+        return EF_ERR;
+    }
+    //4、擦除第一个数据区
+    if(_erase_sector(data_sector_idx) != EF_OK){
+        return EF_ERR;
+    }
+    //5、写入新的头信息
+
+    //第一个数据区 -> gc区
+    if(_write_sector_status(m_sector_desc_list[data_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_FREE) != EF_OK){
+        return EF_ERR;
+    }
+    m_sector_desc_list[data_sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
+
+    if(_write_sector_role(m_sector_desc_list[data_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_GC) != EF_OK){
+        return EF_ERR;
+    }
+    m_sector_desc_list[data_sector_idx].attr.role = EFLASH_SECTOR_ROLE_GC;
+
+    //gc区 -> 数据区
+    if(_write_sector_status(m_sector_desc_list[gc_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_USING) != EF_OK){
+        return EF_ERR;
+    }
+    m_sector_desc_list[gc_sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
+    if(_write_sector_role(m_sector_desc_list[gc_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_DATA) != EF_OK){
+        return EF_ERR;
+    }
+    m_sector_desc_list[gc_sector_idx].attr.role = EFLASH_SECTOR_ROLE_DATA;
+    //6、更新内存中的扇区信息
+    m_sector_desc_list[data_sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);
+    m_sector_desc_list[data_sector_idx].record_count = 0;
+    return EF_OK;
+}
+
+
+EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count) {
+    printf("EmbeddedFlash: Starting initialization...\n");
+    printf("EmbeddedFlash: KV_SECTOR_START_ADDR=0x%08X\n", KV_SECTOR_START_ADDR);
+    printf("EmbeddedFlash: KV_SECTOR_SIZE=%d\n", KV_SECTOR_SIZE);
+    printf("EmbeddedFlash: KV_SECTOR_COUNT=%d\n", KV_SECTOR_COUNT);
+    
+    // 调试：打印扇区头和KV记录结构体大小
+    printf("EmbeddedFlash: sizeof(sector_header_t)=%d bytes\n", sizeof(sector_header_t));
+    printf("EmbeddedFlash: SECTOR_STATUS_TABLE_SIZE=%d bytes\n", SECTOR_STATUS_TABLE_SIZE);
+    printf("EmbeddedFlash: SECTOR_ROLE_TABLE_SIZE=%d bytes\n", SECTOR_ROLE_TABLE_SIZE);
+    printf("EmbeddedFlash: sizeof(KV_Record)=%d bytes\n", sizeof(KV_Record));
+    printf("EmbeddedFlash: KV_STATUS_TABLE_SIZE=%d bytes\n", KV_STATUS_TABLE_SIZE);
+    printf("EmbeddedFlash: KV_MAGIC_OFFSET=%d bytes\n", KV_MAGIC_OFFSET);
+    printf("EmbeddedFlash: EFLASH_WRITE_GRAN=%d bits\n", EFLASH_WRITE_GRAN);
+    for (int i = 0; i < KV_SECTOR_COUNT; i++) {
+        printf("EmbeddedFlash: Sector[%d] addr=0x%08X, status=%d, role=%d\n", 
+               i, m_sector_desc_list[i].sector_addr, 
+               m_sector_desc_list[i].attr.status, m_sector_desc_list[i].attr.role);
+               printf("EmbeddedFlash: Sector[%d] free_space=%d\n", i, m_sector_desc_list[i].free_space);
+               printf("EmbeddedFlash: Sector[%d] record_count=%d\n", i, m_sector_desc_list[i].record_count);
+    }
+
+    if (defaults == NULL || default_count == 0 || default_count > 255) {
+        return EF_ERR_PARAM;
+    }
+    mp_kv_list = (kv_data_t *)defaults;  // 转换为非const指针
+    m_kv_data_list_count = default_count;
+    
+    embedded_flash_att_status_t status = embedded_flash_get_attr_status();
+    switch(status){
+        case EFLASH_STATUS_NORMAL:
+            _load_kv_record();
+            _init_all_kv_record();
+            break;
+        case EFLASH_STATUS_FIRST_POWER_ON:
+            _init_all_sector_attr();
+            _init_all_kv_record();
+            _load_kv_record();
+            break;
+       default:
+            _load_kv_record();
+            _rebuild_sector();
+            _load_kv_record();
+            _init_all_kv_record();
+            break;
+    }
+    return EF_OK;
+}
+
+// ==================== 类型化设置函数 ====================
+static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type);
+EF_ErrCode embedded_flash_set_bool(uint8_t key, bool value) {
+    uint8_t temp = value ? 1 : 0;
+    return embedded_flash_set(key, (uint8_t*)&temp, sizeof(uint8_t), EFLASH_FORMAT_BOOL);
+}
+
+EF_ErrCode embedded_flash_set_uint8(uint8_t key, uint8_t value) {
+    return embedded_flash_set(key, &value, sizeof(uint8_t), EFLASH_FORMAT_UINT8);
+}
+
+EF_ErrCode embedded_flash_set_int8(uint8_t key, int8_t value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int8_t), EFLASH_FORMAT_INT8);
+}
+
+EF_ErrCode embedded_flash_set_uint16(uint8_t key, uint16_t value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(uint16_t), EFLASH_FORMAT_UINT16);
+}
+
+EF_ErrCode embedded_flash_set_int16(uint8_t key, int16_t value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int16_t), EFLASH_FORMAT_INT16);
+}
+
+EF_ErrCode embedded_flash_set_uint32(uint8_t key, uint32_t value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(uint32_t), EFLASH_FORMAT_UINT32);
+}
+
+EF_ErrCode embedded_flash_set_int32(uint8_t key, int32_t value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int32_t), EFLASH_FORMAT_INT32);
+}
+
+EF_ErrCode embedded_flash_set_uint64(uint8_t key, uint64_t value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(uint64_t), EFLASH_FORMAT_UINT64);
+}
+
+EF_ErrCode embedded_flash_set_int64(uint8_t key, int64_t value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(int64_t), EFLASH_FORMAT_INT64);
+}
+
+EF_ErrCode embedded_flash_set_float(uint8_t key, float value) {
+    return embedded_flash_set(key, (uint8_t*)&value, sizeof(float), EFLASH_FORMAT_FLOAT);
+}
+
+EF_ErrCode embedded_flash_set_string(uint8_t key, const char *value) {
+    if (value == NULL) {
+        printf("Invalid string value for key=%d\n", key);
+        return EF_ERR_PARAM;
+    }
+    uint8_t length = strlen(value);
+    if (length+1 > KV_MAX_VALUE_SIZE || length == 0) {
+        printf("String too long or empty for key=%d, length=%d\n", key, length);
+        return EF_ERR_PARAM;
+    }
+    // 存储字符串时包含结束符，所以长度+1
+    return embedded_flash_set(key, (uint8_t*)value, length+1, EFLASH_FORMAT_STRING);
+}
+
+EF_ErrCode embedded_flash_set_hex(uint8_t key, const uint8_t *value, uint8_t length) {
+    if (value == NULL || length == 0 || length > KV_MAX_VALUE_SIZE) {
+        printf("Invalid hex data for key=%d, length=%d\n", key, length);
+        return EF_ERR_PARAM;
+    }
+    return embedded_flash_set(key, value, length, EFLASH_FORMAT_HEX);
+}
+
+// ==================== 内部通用设置函数 ====================
+/**
+ * @brief 删除KV记录（分阶段提交）
+ * @param addr KV记录地址
+ * @return FLASH_NO_ERR=成功, 其他=失败
+ * 
+ * @note 删除流程：
+ *       1. 标记为PRE_DELETE（写入addr+8）
+ *       2. 标记为DELETED（写入addr+12）
+ */
+static EF_ErrCode _kv_delete_record(uint32_t addr)
+{
+    EF_ErrCode result = EF_OK;
+    uint8_t status_table[KV_STATUS_TABLE_SIZE];
+    
+    /* 阶段1：标记为"预删除" */
+    result = _write_kv_status(addr, EFLASH_KV_PRE_DELETE);
+    if (result != EF_OK) {
+        return result;
+    }
+    
+    /* 阶段2：标记为"已删除" */
+    result = _write_kv_status(addr, EFLASH_KV_DELETED);
+    
+    return result;
+}
+
+/**
+ * @brief 设置键值对（内部使用）
+ * @param key 键
+ * @param value 值指针
+ * @param length 值长度
+ * @param data_type 数据类型
+ * @return 0=成功, -1=失败
+ */
+static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type) {
+    printf("[SET] key=%d, type=%d, len=%d\n", key, data_type, length);
+    
+    if (value == NULL) {
+		printf("Invalid input for set operation: key=%d, len:%d\n", key,length);
+        return EF_ERR_PARAM;
+    }
+    
+    // 验证长度与数据类型匹配
+    uint8_t expected_length = embedded_flash_get_type_size(data_type);
+    if (expected_length > 0) {
+        // 固定长度类型
+        if (length != expected_length) {
+            printf("Invalid length for key=%d: expected=%d, got=%d\n", key, expected_length, length);
+            EFLASH_ASSERT(0);
+            return EF_ERR_PARAM;
+        }
+    } else {
+        // 可变长度类型（STRING, HEX）
+        if (length == 0 || length > KV_MAX_VALUE_SIZE) {
+            printf("Invalid length for key=%d: length=%d (must be 1-%d for variable length types)\n", key, length, KV_MAX_VALUE_SIZE);
+            EFLASH_ASSERT(0);
+            return EF_ERR_PARAM;
+        }
+    }
+    
+    uint8_t get_value[KV_MAX_VALUE_SIZE] = {0};
+    uint8_t get_length = 0;
+    uint8_t get_data_type = 0;
+    if(embedded_flash_get(key, get_value, &get_length, &get_data_type) != EF_OK){
+        printf("Failed to get data for key=%d\n", key);
+        return EF_ERR_READ;
+    }
+    if(get_length == length && memcmp(get_value, value, length) == 0 && get_data_type == data_type){
+        //重复数据，直接返回
+        printf("Duplicate data for key=%d, length=%d, data_type=%d\n", key, length, data_type);
+        return EF_OK;
+    }
+    /*工作流程
+        1、新 PRE_WRITE → 新 WRITE → 旧 PRE_DELETE → 旧 DELETED
+        2、任意时刻至少有一条 WRITE 生效（数据存储顺序为先旧后新）
+    */
+    KV_Record record = {0};
+    // 构造记录
+    memset(&record, 0xFF, sizeof(KV_Record));  // 先全部初始化为0xFF
+	_set_kv_status_table(record.status_table, EFLASH_KV_PRE_WRITE);
+    record.magic = KV_HEADER_MAGIC;
+    record.data_type = data_type;
+    record.key = key;
+    record.value_length = length;  // value_length就是值的长度
+    
+    // 关键修复：先清零整个value数组，然后复制数据
+    memset(record.value, 0, KV_MAX_VALUE_SIZE);
+    memcpy(record.value, value, length);
+
+    // 计算CRC - 跳过status_table(16) + magic(1) + data_type(1)，从key开始校验key + value_length + value
+    // 关键修复：使用固定长度KV_MAX_VALUE_SIZE而不是实际数据长度
+    record.crc = crc16_x25_calculate((uint8_t*)&record.key, 2 + KV_MAX_VALUE_SIZE);
+    
+    // 查找对应的kv_data_t
+    kv_data_t *p_kv_data = _find_kv_data(key);
+    if(p_kv_data == NULL){
+        printf("Key not found: %d\n", key);
+        return EF_ERR_PARAM;
+    }
+    
+    // 写入记录（使用状态表机制实现分阶段提交）
+    uint32_t new_write_abs_addr = _write_kv_record(&record);
+    if(new_write_abs_addr == 0){
+		printf("_write_kv_record fail\r\n");
+        return EF_ERR_WRITE;
+    }
+
+    // 使用类型安全函数将新记录标记为WRITE状态
+    if(_write_kv_status(new_write_abs_addr, EFLASH_KV_WRITE) != EF_OK){
+		printf("write EFLASH_KV_WRITE fail\r\n");
+        EFLASH_ASSERT(0);
+        return EF_ERR_WRITE;
+    }
+    //如果不相等，那么内部有大于2条数据记录，需要将旧记录设置为删除
+    if(p_kv_data->addr_abs != 0 && p_kv_data->addr_abs != new_write_abs_addr){
+        //使用状态表机制删除旧记录
+        if(_kv_delete_record(p_kv_data->addr_abs) != EF_OK){
+            printf("Failed to delete old record at 0x%08X\n", p_kv_data->addr_abs);
+            return EF_ERR_WRITE;
+        }
+    }
+    //更新最新记录的信息到ram
+    p_kv_data->addr_abs = new_write_abs_addr;
+    p_kv_data->value_length = record.value_length;
+    p_kv_data->data_type = record.data_type;
+    p_kv_data->data_source = KV_DATA_SOURCE_UPDATE_WRITE;//更新数据到掉电储存区
+	memcpy(p_kv_data->value, value, length);
+
+    printf("Set operation successful for key=%d,addr:0x%x\n", key,new_write_abs_addr);
+
+    
+    return EF_OK;
+}
+
+
+/**
+ * @brief 查找指定键的最新记录
+ * @param key 键
+ * @param record 记录
+ * @param addr 记录地址 
+ * @return 0=成功, -1=失败
+ */
+static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t *addr) {
+    uint32_t read_addr = p_kv_data->addr_abs;
+    if(flash_port_read(read_addr, (uint8_t*)record, sizeof(KV_Record)) != EF_OK){
+        printf("Failed to read record at stored address=0x%x for key=%d\n", read_addr, p_kv_data->key);
+        return -1;
+    }
+    EmbeddedFlash_record_status_e record_status = _is_kv_record(record);
+    if (record_status == EFLASH_KV_UNUSED){
+        printf("Invalid record at stored address=0x%x for key=%d\n", read_addr, p_kv_data->key);
+        // _foreach_sector_record()
+        // printf("No valid record found for key=%d after scanning all sectors\n", p_kv_data->key);
+        return -1;
+    }
+    *addr = read_addr;
+    if(memcmp(record->value, p_kv_data->value, p_kv_data->value_length) != 0){
+        goto data_diff_proce;
+    }
+    if(record->data_type != p_kv_data->data_type){
+        goto data_diff_proce;
+    }
+
+    
+    //有没有可能长度不一样？？？？
+    //todo...
+
+    //数据没有差异
+    return 0;
+
+data_diff_proce:
+    if(record->value_length > KV_MAX_VALUE_SIZE){
+        EFLASH_ASSERT(0);
+        return -1;
+    }
+    p_kv_data->value_length = record->value_length;  // value_length就是值的长度
+	p_kv_data->data_type = record->data_type;
+    p_kv_data->data_source = KV_DATA_SOURCE_FLASH_OVERRIDE;//从掉电储存区更新数据
+    memcpy(p_kv_data->value, record->value, record->value_length);
+    return 0;
+}
+/**
+ * @brief 获取键值对
+ * @param key 键
+ * @param value 值缓冲区
+ * @param length 返回值长度
+ * @param data_type 返回数据类型
+ * @return 0=成功, -1=失败
+ */
+EF_ErrCode embedded_flash_get(uint8_t key, uint8_t *value, uint8_t *length, uint8_t *data_type) {
+    if (value == NULL || length == NULL || data_type == NULL) {
+        printf("Invalid input for get operation: key=%d\n", key);
+        return EF_ERR_PARAM;
+    }
+    /* 工作流程
+        1、根据地址获取flash数据记录，如果没找到就遍历整个扇区看有没有数据记录
+        2、对比读取出来的数据记录并跟当前数据对比，如果有差异就断言失败
+        3、返回数据
+    */
+    
+    kv_data_t *p_kv_data = _find_kv_data(key);
+    if(p_kv_data == NULL){
+        printf("Key not found: %d\n", key);    
+        return EF_ERR;
+    }
+    // printf("Getting data for key=%d, stored address=0x%x\n", key, p_kv_data->addr_abs);
+    uint32_t addr = 0;
+    KV_Record record={0};
+    if(_find_latest_record(p_kv_data, &record, &addr) != 0){
+        printf("Failed to find latest record for key=%d\n", key);
+        return EF_ERR;
+    }
+    // 复制数据
+    *length = record.value_length;  // value_length就是值的长度
+    *data_type = record.data_type;
+    
+    // 检查缓冲区大小，防止数组越界
+    if (*length > KV_MAX_VALUE_SIZE || *length == 0) {
+        printf("CRITICAL: value_length=%d exceeds KV_MAX_VALUE_SIZE=%d for key=%d\n", *length, KV_MAX_VALUE_SIZE, key);
+        return EF_ERR_PARAM;
+    }
+    memcpy(value, record.value, *length);
+    printf("Get operation successful for key=%d, len=%d, addr=0x%x\n", key, *length, p_kv_data->addr_abs);
+    return EF_OK;
+}
+
+
+/**
+ * @brief 删除键值对
+ * @param key 键
+ * @return 0=成功, -1=失败
+ */
+EF_ErrCode embedded_flash_delete(uint8_t key) 
+{
+    /* 工作流程
+        1、mp_kv_list中找到对应键值对的记录
+        2、将记录状态设置为删除
+        3、写入成功后将数据设置为删除，并更新addr_abs_offset，方便读写
+        4、写入失败返回错误码
+    */
+    kv_data_t *p_kv_data = _find_kv_data(key);
+    if(p_kv_data == NULL){
+        return EF_ERR;
+    }
+    
+    // 使用状态表机制删除记录
+    if(_kv_delete_record(p_kv_data->addr_abs) != EF_OK){
+        EFLASH_ASSERT(0);
+        return EF_ERR;
+    }
+    
+    p_kv_data->addr_abs = 0;
+    p_kv_data->data_source = KV_DATA_SOURCE_DEFAULT;
+    return EF_OK;
+}
 
 

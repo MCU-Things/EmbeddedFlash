@@ -11,35 +11,12 @@
 #ifndef __EMBEDDED_FLASH_PORT_H__
 #define __EMBEDDED_FLASH_PORT_H__
 
+#include "EmbeddedFlash_def.h"
 #include "stm32f10x.h"
 #include <stdint.h>
 #include <stddef.h>
 
-/* Flash配置参数 */
-#define FLASH_PAGE_SIZE             (0x800U)                  /* 2KB per page */
-#define FLASH_START_ADDR            (0x08000000U)             /* Flash起始地址 */
-#define FLASH_END_ADDR              (0x0807FFFFU)             /* Flash结束地址 (512KB) */
-#define FLASH_SIZE                  (512 * 1024)            /* 512KB */
 
-/* 错误码定义（统一以 EF_ 前缀命名） */
-typedef enum {
-    EF_OK = 0,                 /* 成功 */
-    EF_ERR_PARAM,              /* 参数非法 */
-    EF_ERR_ADDR_RANGE,         /* 地址越界 */
-    EF_ERR_ADDR_ALIGN,         /* 地址未按要求对齐 */
-    EF_ERR_SIZE_ZERO,          /* 大小为0 */
-    EF_ERR_SIZE_ALIGN,         /* 大小未按要求对齐 */
-    EF_ERR_LOCKED,             /* Flash处于锁定状态 */
-    EF_ERR_BUSY,               /* Flash忙 */
-    EF_ERR_TIMEOUT,            /* 操作超时 */
-    EF_ERR_PROTECTION,         /* 写保护/选项字限制 */
-    EF_ERR_ERASE,              /* 擦除失败 */
-    EF_ERR_WRITE,              /* 写入失败 */
-    EF_ERR_READ,               /* 读取失败 */
-    EF_ERR_VERIFY,             /* 写后校验失败 */
-    EF_ERR,                    /* 通用错误（未归类时返回） */
-    EF_ERR_UNKNOWN             /* 未知错误 */
-} EF_ErrCode;
 
 /**
  * @brief Flash硬件初始化

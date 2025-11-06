@@ -11,6 +11,7 @@
 #include "EmbeddedFlash_port.h"
 #include "stm32f10x_flash.h"
 #include <stdio.h>
+#include <string.h>
 
 /**
  * @brief Flash硬件初始化
@@ -142,9 +143,10 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
     for (i = 0; i < size; i += 4, buf_32++, addr += 4) {
         /* 写入数据 */
         flash_status = FLASH_ProgramWord(addr, *buf_32);
-        if (flash_status != FLASH_COMPLETE &&  flash_status != FLASH_ERROR_PG) {
+        if (flash_status != FLASH_COMPLETE) {
             printf("Flash: Program failed at 0x%08X, error status=%d\n", addr, flash_status);
             result = EF_ERR_WRITE;
+            EFLASH_ASSERT(0);
             break;
         }
 
