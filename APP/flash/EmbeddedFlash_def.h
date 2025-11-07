@@ -25,6 +25,16 @@
 //     #define EFLASH_ASSERT(expr) ((void)0)
 // #endif
 
+/* ==================== 打印 HEX 数据宏 ==================== */
+#define EFLASH_PRINT_HEX(desc, buf, len) \
+    do { \
+        printf("HEX[%s]: [", (desc)); \
+        for (uint32_t _i = 0; _i < (len); ++_i) { \
+            printf("%02X ", (uint8_t)((buf)[_i])); \
+        } \
+        printf("]\n"); \
+    } while(0)
+
 /* ==================== 错误码定义 ==================== */
 /* 统一以 EF_ 前缀命名 */
 typedef enum {
