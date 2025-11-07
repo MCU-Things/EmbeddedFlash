@@ -41,6 +41,8 @@ EF_ErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size) {
     /* 参数检查 */
     if (addr < FLASH_START_ADDR || addr > FLASH_END_ADDR || 
         size > (FLASH_END_ADDR - addr + 1) || buf == NULL) {
+        printf("Flash: Invalid read parameters, addr=0x%08X, size=%d, buf=%p\n", 
+               addr, size, buf);
         return EF_ERR_PARAM;
     }
 
@@ -135,32 +137,43 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
         printf("Flash: Address not 4-byte aligned: 0x%08X\n", addr);
         return EF_ERR_ADDR_ALIGN;
     }
+    
+    /* 检查大小对齐 */
+    if (size % 4 != 0) {
+        printf("Flash: Size not 4-byte aligned: %d\n", size);
+        return EF_ERR_SIZE_ALIGN;
+    }
 
     FLASH_Unlock();
-    FLASH_ClearFlag(FLASH_FLAG_BSY | FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
-    
     /* 按4字节为单位写入 */
     for (i = 0; i < size; i += 4, buf_32++, addr += 4) {
+        FLASH_ClearFlag(FLASH_FLAG_BSY | FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
         /* 写入数据 */
         flash_status = FLASH_ProgramWord(addr, *buf_32);
-        if (flash_status != FLASH_COMPLETE) {
-            printf("Flash: Program failed at 0x%08X, error status=%d\n", addr, flash_status);
+        
+        if (flash_status == FLASH_COMPLETE) {
+            /* 验证写入 */
+            read_data = *(uint32_t *)addr;
+            if (read_data != *buf_32) {
+                result = EF_ERR_WRITE;
+                printf("Flash: Verification failed at 0x%08X, expected=0x%08X, actual=0x%08X\n",
+                       addr, *buf_32, read_data);
+                break;
+            }
+        } else {
             result = EF_ERR_WRITE;
-            EFLASH_ASSERT(0);
-            break;
-        }
-
-        /* 验证写入 */
-        read_data = *(uint32_t *)addr;
-        if (read_data != *buf_32) {
-            result = EF_ERR_VERIFY;
-            printf("Flash: Write verification failed at 0x%08X, expected=0x%08X, actual=0x%08X\n",
-                   addr, *buf_32, read_data);
+            printf("Flash: Program failed at 0x%08X, status=%d\n", addr, flash_status);
             break;
         }
     }
     
     FLASH_Lock();
+    
+    /* 如果部分写入成功，返回部分成功错误码 */
+    if (result != EF_OK && i > 0 && i < size) {
+        printf("Flash: Partial write completed - %d/%d bytes written successfully\n", i, size);
+        result = EF_ERR_WRITE; // 仍然返回错误，但已尝试最大努力写入
+    }
 
     return result;
 }
