@@ -120,7 +120,7 @@
         <SetRegEntry>
           <Number>0</Number>
           <Key>DLGUARM</Key>
-          <Name></Name>
+          <Name>d</Name>
         </SetRegEntry>
         <SetRegEntry>
           <Number>0</Number>
@@ -159,7 +159,7 @@
           <Type>0</Type>
           <LineNumber>28</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134259254</Address>
+          <Address>134255896</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -175,7 +175,7 @@
           <Type>0</Type>
           <LineNumber>59</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134220908</Address>
+          <Address>134220714</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -191,7 +191,7 @@
           <Type>0</Type>
           <LineNumber>79</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134259756</Address>
+          <Address>134256346</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -201,70 +201,6 @@
           <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\embedded_flash_demo_tests.c</Filename>
           <ExecCommand></ExecCommand>
           <Expression>\\Template\APP/flash/embedded_flash_demo_tests.c\79</Expression>
-        </Bp>
-        <Bp>
-          <Number>3</Number>
-          <Type>0</Type>
-          <LineNumber>145</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134258938</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash_port.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash_port.c\145</Expression>
-        </Bp>
-        <Bp>
-          <Number>4</Number>
-          <Type>0</Type>
-          <LineNumber>1194</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134229568</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash.c\1194</Expression>
-        </Bp>
-        <Bp>
-          <Number>5</Number>
-          <Type>0</Type>
-          <LineNumber>1200</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134229614</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash.c\1200</Expression>
-        </Bp>
-        <Bp>
-          <Number>6</Number>
-          <Type>0</Type>
-          <LineNumber>2052</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134229802</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>E:\瀛樺偍\stm32f103zet6\APP\flash\EmbeddedFlash.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Template\APP/flash/EmbeddedFlash.c\2052</Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow1>
@@ -276,12 +212,12 @@
         <Ww>
           <count>1</count>
           <WinNumber>1</WinNumber>
-          <ItemText>mp_kv_list</ItemText>
+          <ItemText>test_kvs</ItemText>
         </Ww>
         <Ww>
           <count>2</count>
           <WinNumber>1</WinNumber>
-          <ItemText>test_kvs</ItemText>
+          <ItemText>m_kv_data_list_count</ItemText>
         </Ww>
       </WatchWindow1>
       <MemoryWindow1>
