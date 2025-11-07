@@ -216,7 +216,7 @@ int embedded_flash_demo_basic_test(void) {
 	if (embedded_flash_set_string(TEST_STRING_8_A5_165, test_string) == 0) {
 		if (embedded_flash_get(TEST_STRING_8_A5_165, buf, &len, &type) == 0 
         && type == EFLASH_FORMAT_STRING
-        && len == strlen(test_string) + 1 
+        && len == strlen(test_string)
         && strcmp((char*)buf, test_string) == 0) {
 			print_pass("basic read/write (test_string)");
 		} else {
@@ -1025,9 +1025,8 @@ int embedded_flash_demo_boundary_test(void) {
 int embedded_flash_demo_gc_stress_test(void) {
 	print_test_start("GC Stress Test");
 	printf("Testing multiple garbage collection cycles...\n");
-    // 使用联合体确保内存对齐
-    union {
-        uint8_t raw[10];  // 增加大小以容纳64位数据
+    struct {
+        bool bool_val;
         uint8_t uint8_val;
         uint16_t uint16_val;
         uint32_t uint32_val;
@@ -1037,11 +1036,13 @@ int embedded_flash_demo_gc_stress_test(void) {
         int32_t int32_val;
         int64_t int64_val;
         float float_val;
-        char string_val[10];
-    } test_buffer, read_buffer;
+        char string_val[KV_MAX_VALUE_SIZE];
+        uint8_t hex_val[KV_MAX_VALUE_SIZE];
+    } test_buffer;
     
     uint8_t len, type;
     int gc_cycles = 0;
+    uint8_t read_buffer[KV_MAX_VALUE_SIZE];  // 使用数组替代结构体
     
     // 使用所有可用的key进行大量写入，强制触发GC
     int key_count = sizeof(test_kvs) / sizeof(kv_data_t);
@@ -1049,10 +1050,46 @@ int embedded_flash_demo_gc_stress_test(void) {
 		
     // 进行多轮写入，每轮都会覆盖之前的数据
     for (int round = 0; round < 20; round++) {
-			// 填充测试数据
-			for (int j = 0; j < 16; j++) {
-					test_buffer.raw[j] = (uint8_t)((round * 100 + j) & 0xFF);
-			}
+        // 填充测试数据
+        for (int j = 0; j < 16; j++) {
+            //填充随机数据
+            uint32_t random_seed = (round * 100 + j) * 31;  // 简单的伪随机种子
+            
+            // 生成随机布尔值
+            test_buffer.bool_val = (random_seed % 2) == 0;
+            
+            // 生成随机8位值
+            test_buffer.uint8_val = (uint8_t)(random_seed & 0xFF);
+            test_buffer.int8_val = (int8_t)(random_seed & 0xFF);
+            
+            // 生成随机16位值
+            test_buffer.uint16_val = (uint16_t)((random_seed * 3) & 0xFFFF);
+            test_buffer.int16_val = (int16_t)((random_seed * 3) & 0xFFFF);
+            
+            // 生成随机32位值
+            test_buffer.uint32_val = (uint32_t)((random_seed * 7) & 0xFFFFFFFF);
+            test_buffer.int32_val = (int32_t)((random_seed * 7) & 0xFFFFFFFF);
+            
+            // 生成随机64位值
+            test_buffer.uint64_val = ((uint64_t)random_seed << 32) | (uint64_t)(random_seed * 11);
+            test_buffer.int64_val = (int64_t)test_buffer.uint64_val;
+            
+            // 生成随机浮点数
+            test_buffer.float_val = (float)(random_seed % 1000) / 100.0f;
+            
+            // 生成随机字符串
+            const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            int str_len = 5 + (random_seed % 10);  // 长度5-14
+            for (int k = 0; k < str_len && k < KV_MAX_VALUE_SIZE - 1; k++) {
+                test_buffer.string_val[k] = charset[(random_seed + k) % (sizeof(charset) - 1)];
+            }
+            test_buffer.string_val[str_len] = '\0';
+            
+            // 生成随机十六进制数据
+            for (int k = 0; k < 6; k++) {
+                test_buffer.hex_val[k] = (uint8_t)((random_seed * (k + 1)) & 0xFF);
+            }
+        }
         for (int i = 0; i < key_count; i++) {
             
             
@@ -1060,62 +1097,48 @@ int embedded_flash_demo_gc_stress_test(void) {
             int write_result = -1;
             switch (test_kvs[i].data_type) {
                 case EFLASH_FORMAT_UINT8:
-                    write_result = embedded_flash_set_uint8(test_kvs[i].key, test_buffer.raw[0]);
+                    write_result = embedded_flash_set_uint8(test_kvs[i].key, test_buffer.uint8_val);
                     break;
                 case EFLASH_FORMAT_INT8:
-                    write_result = embedded_flash_set_int8(test_kvs[i].key, test_buffer.raw[0]);
+                    write_result = embedded_flash_set_int8(test_kvs[i].key, test_buffer.int8_val);
                     break;
                 case EFLASH_FORMAT_BOOL:
-                    write_result = embedded_flash_set_bool(test_kvs[i].key, test_buffer.raw[0]);
+                    write_result = embedded_flash_set_bool(test_kvs[i].key, test_buffer.bool_val);
                     break;
                 case EFLASH_FORMAT_UINT16: {
-                    uint16_t uint16_val;
-                    memcpy(&uint16_val, test_buffer.raw, sizeof(uint16_t));
-                    write_result = embedded_flash_set_uint16(test_kvs[i].key, uint16_val);
+                    write_result = embedded_flash_set_uint16(test_kvs[i].key, test_buffer.uint16_val);
                     break;
                 }
                 case EFLASH_FORMAT_INT16: {
-                    int16_t int16_val;
-                    memcpy(&int16_val, test_buffer.raw, sizeof(int16_t));
-                    write_result = embedded_flash_set_int16(test_kvs[i].key, int16_val);
+                    write_result = embedded_flash_set_int16(test_kvs[i].key, test_buffer.int16_val);
                     break;
                 }
                 case EFLASH_FORMAT_UINT32: {
-                    uint32_t uint32_val;
-                    memcpy(&uint32_val, test_buffer.raw, sizeof(uint32_t));
-                    write_result = embedded_flash_set_uint32(test_kvs[i].key, uint32_val);
+                    write_result = embedded_flash_set_uint32(test_kvs[i].key, test_buffer.uint32_val);
                     break;
                 }
                 case EFLASH_FORMAT_INT32: {
-                    int32_t int32_val;
-                    memcpy(&int32_val, test_buffer.raw, sizeof(int32_t));
-                    write_result = embedded_flash_set_int32(test_kvs[i].key, int32_val);
+                    write_result = embedded_flash_set_int32(test_kvs[i].key, test_buffer.int32_val);
                     break;
                 }
                 case EFLASH_FORMAT_UINT64: {
-                    uint64_t uint64_val;
-                    memcpy(&uint64_val, test_buffer.raw, sizeof(uint64_t));
-                    write_result = embedded_flash_set_uint64(test_kvs[i].key, uint64_val);
+                    write_result = embedded_flash_set_uint64(test_kvs[i].key, test_buffer.uint64_val);
                     break;
                 }
                 case EFLASH_FORMAT_INT64: {
-                    int64_t int64_val;
-                    memcpy(&int64_val, test_buffer.raw, sizeof(int64_t));
-                    write_result = embedded_flash_set_int64(test_kvs[i].key, int64_val);
+                    write_result = embedded_flash_set_int64(test_kvs[i].key, test_buffer.int64_val);
                     break;
                 }
                 case EFLASH_FORMAT_FLOAT: {
-                    float float_val;
-                    memcpy(&float_val, test_buffer.raw, sizeof(float));
-                    write_result = embedded_flash_set_float(test_kvs[i].key, float_val);
+                    write_result = embedded_flash_set_float(test_kvs[i].key, test_buffer.float_val);
                     break;
                 }
                 case EFLASH_FORMAT_STRING:
-                    test_buffer.raw[9] = '\0'; // 确保字符串以null结尾，最大9字节数据 + null = 10字节
-                    write_result = embedded_flash_set_string(test_kvs[i].key, (char*)test_buffer.raw);
+                    printf("string_val: %s\n", test_buffer.string_val);
+                    write_result = embedded_flash_set_string(test_kvs[i].key, test_buffer.string_val);
                     break;
                 case EFLASH_FORMAT_HEX:
-                    write_result = embedded_flash_set_hex(test_kvs[i].key, test_buffer.raw, 10);  // 最大10字节
+                    write_result = embedded_flash_set_hex(test_kvs[i].key, test_buffer.hex_val, 6);  // 最大6字节
                     break;
                 default:
                     write_result = -1;
@@ -1135,8 +1158,75 @@ int embedded_flash_demo_gc_stress_test(void) {
         
         // 验证数据完整性
         for (int k = 0; k < key_count; k++) {
-            if (embedded_flash_get(test_kvs[k].key, read_buffer.raw, &len, &type) != 0) {
+            if (embedded_flash_get(test_kvs[k].key, read_buffer, &len, &type) != 0) {
                 printf("GC stress test read failed at round %d, key %d\n", round, test_kvs[k].key);
+                return -1;
+            }
+            
+            // 验证数据类型和长度
+            uint8_t expected_len = embedded_flash_get_type_size(test_kvs[k].data_type);
+            if (expected_len == 0) {
+                if (test_kvs[k].data_type == EFLASH_FORMAT_STRING) {
+                    expected_len = strlen(test_kvs[k].value);
+                } else if (test_kvs[k].data_type == EFLASH_FORMAT_HEX) {
+                    expected_len = 6;  // 上面之随机生成6
+                }
+            }
+            // 检查数据类型和长度是否匹配
+            if (type != test_kvs[k].data_type || len != expected_len) {
+                printf("GC stress test type/len mismatch at round %d, key %d: expected type=%d,len=%d, got type=%d,len=%d\n", 
+                       round, test_kvs[k].key, test_kvs[k].data_type, expected_len, type, len);
+                return -1;
+            }
+            
+            // 验证数据值
+            int data_match = 0;
+            switch (test_kvs[k].data_type) {
+                case EFLASH_FORMAT_BOOL:
+                    data_match = (*((bool*)read_buffer) == test_buffer.bool_val);
+                    break;
+                case EFLASH_FORMAT_UINT8:
+                    data_match = (*((uint8_t*)read_buffer) == test_buffer.uint8_val);
+                    break;
+                case EFLASH_FORMAT_INT8:
+                    data_match = (*((int8_t*)read_buffer) == test_buffer.int8_val);
+                    break;
+                case EFLASH_FORMAT_UINT16:
+                    data_match = (*((uint16_t*)read_buffer) == test_buffer.uint16_val);
+                    break;
+                case EFLASH_FORMAT_INT16:
+                    data_match = (*((int16_t*)read_buffer) == test_buffer.int16_val);
+                    break;
+                case EFLASH_FORMAT_UINT32:
+                    data_match = (*((uint32_t*)read_buffer) == test_buffer.uint32_val);
+                    break;
+                case EFLASH_FORMAT_INT32:
+                    data_match = (*((int32_t*)read_buffer) == test_buffer.int32_val);
+                    break;
+                case EFLASH_FORMAT_UINT64:
+                    data_match = (*((uint64_t*)read_buffer) == test_buffer.uint64_val);
+                    break;
+                case EFLASH_FORMAT_INT64:
+                    data_match = (*((int64_t*)read_buffer) == test_buffer.int64_val);
+                    break;
+                case EFLASH_FORMAT_FLOAT:
+                    // 浮点数比较允许小的误差
+                    data_match = (fabsf(*((float*)read_buffer) - test_buffer.float_val) < 0.001f);
+                    break;
+                case EFLASH_FORMAT_STRING:
+                    data_match = (strcmp((char*)read_buffer, test_buffer.string_val) == 0);
+                    break;
+                case EFLASH_FORMAT_HEX:
+                    data_match = (memcmp(read_buffer, test_buffer.hex_val, 6) == 0);
+                    break;
+                default:
+                    data_match = 0;
+                    break;
+            }
+            
+            if (!data_match) {
+                printf("GC stress test data mismatch at round %d, key %d, type %d\n", 
+                       round, test_kvs[k].key, test_kvs[k].data_type);
                 return -1;
             }
         }
@@ -2220,6 +2310,6 @@ int embedded_flash_demo_run_full(void) {
 }
 
 
-#endif 
+#endif
 
 
