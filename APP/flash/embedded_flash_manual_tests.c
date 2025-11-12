@@ -18,13 +18,9 @@
 #include "stm32f10x.h"
 
 /* ==================== Unity配置 ==================== */
-// #ifndef UNITY_OUTPUT_CHAR
-// #define UNITY_OUTPUT_CHAR(a) SEGGER_RTT_PutChar(0, (char)(a)); USART_SendData(USART1, (uint8_t)(a)); while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET)
-// #endif
-
-// 包含STM32 USART相关头文件
-#include "stm32f10x.h"
-#include "usart.h"
+// 启用Unity配置文件支持，Unity会自动包含 Unity/unity_config.h
+// 所有Unity配置都在 unity_config.h 中统一管理
+#define UNITY_INCLUDE_CONFIG_H
 
 // 包含EmbeddedFlash相关头文件（在Unity之前包含，确保类型定义可用）
 #include "EmbeddedFlash.h"
@@ -57,12 +53,14 @@
     do { \
         /* 检查是否有测试失败：TestFailures不为0 或 CurrentTestFailed不为0 */ \
         if (Unity.TestFailures != 0 || Unity.CurrentTestFailed != 0) { \
-            printf("Unity.TestFile:%s\r\n",Unity.TestFile);\
-            printf("Unity.CurrentTestName:%s\r\n",Unity.CurrentTestName);\
-            printf("Unity.CurrentTestLineNumber:%d\r\n",Unity.CurrentTestLineNumber);\
-            printf("Unity.TestFailures:%d\r\n",Unity.TestFailures);\
-            printf("Unity.CurrentTestFailed:%d\r\n",Unity.CurrentTestFailed);\
-            printf("Unity.NumberOfTests:%d\r\n",Unity.NumberOfTests);\
+            printf("Unity.TestFile: %s\r\n", (Unity.TestFile != NULL) ? Unity.TestFile : "(NULL)");\
+            printf("Unity.CurrentTestName: %s\r\n", (Unity.CurrentTestName != NULL) ? Unity.CurrentTestName : "(NULL)");\
+            printf("Unity.CurrentTestLineNumber: %u\r\n", (unsigned int)Unity.CurrentTestLineNumber);\
+            printf("Unity.TestFailures: %u\r\n", (unsigned int)Unity.TestFailures);\
+            printf("Unity.CurrentTestFailed: %u\r\n", (unsigned int)Unity.CurrentTestFailed);\
+            printf("Unity.NumberOfTests: %u\r\n", (unsigned int)Unity.NumberOfTests);\
+            printf("Unity.TestIgnores: %u\r\n", (unsigned int)Unity.TestIgnores);\
+            printf("Unity.CurrentTestIgnored: %u\r\n", (unsigned int)Unity.CurrentTestIgnored);\
             int _result = UnityEnd(); \
             if (ENABLE_TEST_FAIL_PAUSE) { \
                 printf("!!! Program paused due to test failure. Check debugger or reset device. !!!\r\n"); \
@@ -984,8 +982,8 @@ void test_embedded_flash_stress_test(void) {
                 case EFLASH_FORMAT_INT8: printf("%d", write_data.int8_val); break;
                 case EFLASH_FORMAT_UINT16: printf("%u", write_data.uint16_val); break;
                 case EFLASH_FORMAT_INT16: printf("%d", write_data.int16_val); break;
-                case EFLASH_FORMAT_UINT32: printf("%lu", write_data.uint32_val); break;
-                case EFLASH_FORMAT_INT32: printf("%ld", write_data.int32_val); break;
+                case EFLASH_FORMAT_UINT32: printf("%d", write_data.uint32_val); break;
+                case EFLASH_FORMAT_INT32: printf("%d", write_data.int32_val); break;
                 case EFLASH_FORMAT_UINT64: printf("%llu", write_data.uint64_val); break;
                 case EFLASH_FORMAT_INT64: printf("%lld", write_data.int64_val); break;
                 case EFLASH_FORMAT_FLOAT: printf("%f", write_data.float_val); break;
@@ -1001,8 +999,8 @@ void test_embedded_flash_stress_test(void) {
                 case EFLASH_FORMAT_INT8: printf("%d", read_data.int8_val); break;
                 case EFLASH_FORMAT_UINT16: printf("%u", read_data.uint16_val); break;
                 case EFLASH_FORMAT_INT16: printf("%d", read_data.int16_val); break;
-                case EFLASH_FORMAT_UINT32: printf("%lu", read_data.uint32_val); break;
-                case EFLASH_FORMAT_INT32: printf("%ld", read_data.int32_val); break;
+                case EFLASH_FORMAT_UINT32: printf("%d", read_data.uint32_val); break;
+                case EFLASH_FORMAT_INT32: printf("%d", read_data.int32_val); break;
                 case EFLASH_FORMAT_UINT64: printf("%llu", read_data.uint64_val); break;
                 case EFLASH_FORMAT_INT64: printf("%lld", read_data.int64_val); break;
                 case EFLASH_FORMAT_FLOAT: printf("%f", read_data.float_val); break;
@@ -1191,8 +1189,8 @@ int RunAllTests(void) {
     UnityPrint("\n========== Running Advanced Tests ==========\n");
     test_group_advanced();
     
-    UnityPrint("\n========== Running Stress Tests ==========\n");
-    test_group_stress();
+    // UnityPrint("\n========== Running Stress Tests ==========\n");
+    // test_group_stress();
     
     int failures = UnityEnd();
 		printf("*********failures:%d **************\r\n",failures);

@@ -7,6 +7,7 @@
 #ifndef UNITY_INTERNALS_H
 #define UNITY_INTERNALS_H
 
+#define UNITY_INCLUDE_CONFIG_H  //
 #ifdef UNITY_INCLUDE_CONFIG_H
 #include "unity_config.h"
 #endif
@@ -306,12 +307,8 @@ typedef UNITY_FLOAT_TYPE UNITY_FLOAT;
 #ifndef UNITY_OUTPUT_CHAR
   /* Default to using putchar, which is defined in stdio.h */
   #include <stdio.h>
-  #define UNITY_OUTPUT_CHAR(a) printf("%c", (char)(a));
-  // #include "stm32f10x.h"
-  // #include "SEGGER_RTT.h"
-  // #define UNITY_OUTPUT_CHAR(a) SEGGER_RTT_PutChar(0, (char)(a)); USART_SendData(USART1, (uint8_t)(a)); while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET);
+  #define UNITY_OUTPUT_CHAR(a) (void)putchar(a)
 #else
-
   /* If defined as something else, make sure we declare it here so it's ready for use */
   #ifdef UNITY_OUTPUT_CHAR_HEADER_DECLARATION
     extern void UNITY_OUTPUT_CHAR_HEADER_DECLARATION;
@@ -325,8 +322,7 @@ typedef UNITY_FLOAT_TYPE UNITY_FLOAT;
     #define UNITY_OUTPUT_FLUSH()    (void)fflush(stdout)
   #else
     /* We've specified nothing, therefore flush should just be ignored */
-    #define UNITY_OUTPUT_FLUSH()   printf("\r\n");
-
+    #define UNITY_OUTPUT_FLUSH()    (void)0
   #endif
 #else
   /* If defined as something else, make sure we declare it here so it's ready for use */
