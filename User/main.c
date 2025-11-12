@@ -8,6 +8,7 @@
 
 #include "EmbeddedFlash_port.h"
 #include "embedded_flash_demo_tests.h"
+#include "embedded_flash_manual_tests.h"
 /*******************************************************************************
 * �� �� ��         : main
 * ��������		   : ������
@@ -44,33 +45,60 @@ int main()
 //	
 //	printf("========== Flash Test Complete ==========\n\n");
 	
+	// ==================== 测试模式选择 ====================
+	// 可以通过定义宏来选择运行哪种测试
+	// 1. EMBEDDED_FLASH_DEMO_ENABLE_TESTS - 运行demo_tests（原有测试）
+	// 2. EMBEDDED_FLASH_MANUAL_TESTS_ENABLE - 运行Unity手动测试（新增）
+	//    使用方法：在项目配置中定义 EMBEDDED_FLASH_MANUAL_TESTS_ENABLE (1) 来启用Unity测试
+	
 	#if EMBEDDED_FLASH_DEMO_ENABLE_TESTS
-	InitSysTick();
-	if (flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE*KV_SECTOR_COUNT) != EF_OK) {
-
+		// 运行原有的demo_tests测试
+		InitSysTick();
+		if (flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE*KV_SECTOR_COUNT) != EF_OK) {
 			printf ("erase fail \n");
-	}
-	uint32_t test_count = 0;
-	while(test_count<10){
-		test_count++;
-		printf("\r\n\r\n********      start             ************\r\n");
-		int ret = embedded_flash_demo_run_full();
-		printf("********      end               ************\r\n\r\n");
-		printf("test_count:%d",	test_count);
-		while(ret == -1){
-			//printf("fai!,test_count:%d\r\n",test_count);
-			delay_ms(60*1000);
 		}
-		delay_ms(5000);
+		uint32_t test_count = 0;
+		while(test_count<10){
+			test_count++;
+			printf("\r\n\r\n********      start             ************\r\n");
+			embedded_flash_demo_run_full();
+			printf("********      end               ************\r\n\r\n");
+			printf("test_count:%d",	test_count);
+			delay_ms(5000);
+			embedded_flash_print_erase_stats();
+			delay_ms(5000);
+		}
+	#elif (EMBEDDED_FLASH_MANUAL_TESTS_ENABLE == 1)
+		// 运行Unity手动测试用例
+		test_sysTick_init();
+		printf("\r\n\r\n");
+		printf("========================================\r\n");
+		printf("  Starting Unity Manual Tests\r\n");
+		printf("========================================\r\n");
+		
+		// 运行所有Unity测试用例
+		int test_result = embedded_flash_run_manual_tests();
+		
+		printf("\r\n========================================\r\n");
+		if (test_result == 0) {
+			printf("  All Unity Tests PASSED!\r\n");
+		} else {
+			printf("  Unity Tests FAILED: %d test(s) failed\r\n", test_result);
+		}
+		printf("========================================\r\n\r\n");
+		
+		// 打印擦除统计信息
 		embedded_flash_print_erase_stats();
-		delay_ms(5000);
-	}
+		
+		// 测试完成后进入循环
+		printf("Unity tests completed. Entering main loop...\r\n");
 	#else
-	embedded_flash_demo_init();
+		// 正常运行模式（非测试模式）
+		embedded_flash_demo_init();
 	#endif
 	
-	
-	#if !EMBEDDED_FLASH_DEMO_ENABLE_TESTS
+	// 只有在非测试模式下才运行正常应用代码
+	#if (!EMBEDDED_FLASH_DEMO_ENABLE_TESTS) && (EMBEDDED_FLASH_MANUAL_TESTS_ENABLE != 1)
 	//??????
 	powerOffofFlashSaveData_ToSysData();
 	

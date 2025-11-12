@@ -9,7 +9,7 @@ void InitSysTick(void);
 uint32_t HAL_GetTick(void);
 
 
-#define EMBEDDED_FLASH_DEMO_ENABLE_TESTS (1)
+#define EMBEDDED_FLASH_DEMO_ENABLE_TESTS (0)
 
 
 // 定义测试用的键值对ID - 命名规则: TEST_数据类型_长度_16进制键值_10进制键值

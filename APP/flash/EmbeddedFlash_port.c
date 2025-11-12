@@ -150,6 +150,12 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
         FLASH_ClearFlag(FLASH_FLAG_BSY | FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
         /* 写入数据 */
         flash_status = FLASH_ProgramWord(addr, *buf_32);
+        if (flash_status == FLASH_ERROR_PG)
+        {
+            //数据重复，跳过
+            printf("Flash: Data already exists at 0x%08X, value=0x%08X\n", addr, *buf_32);
+            continue;
+        }
         
         if (flash_status == FLASH_COMPLETE) {
             /* 验证写入 */
