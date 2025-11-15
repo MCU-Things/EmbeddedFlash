@@ -7,6 +7,7 @@
 */
 
 #include "EmbeddedFlash.h"
+#include "EmbeddedFlash_def.h"
 #include "crc16_x25.h"
 #include <stdint.h>
 #include <string.h>
@@ -734,8 +735,7 @@ static EF_ErrCode _init_all_kv_record(void)
             record.magic = KV_HEADER_MAGIC;
             memset(record.status_table, 0xFF, sizeof(record.status_table));
             _set_kv_status_table(record.status_table, EFLASH_KV_PRE_WRITE);
-            EFLASH_PRINT_HEX("status_table", record.status_table, sizeof(record.status_table));
-            
+ 
             record.data_type = mp_kv_list[i].data_type;
             record.key = mp_kv_list[i].key;
             record.value_length = mp_kv_list[i].value_length;
@@ -765,12 +765,15 @@ static EF_ErrCode _init_all_kv_record(void)
                 EFLASH_ASSERT(0);
                 return EF_ERR_WRITE;
             }
-            
             // 更新RAM中的状态
             mp_kv_list[i].addr_abs = write_addr_abs;
             mp_kv_list[i].data_source = KV_DATA_SOURCE_FIRST_WRITE;
             
-            printf("Initialized default value for key=0x%02X at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
+            //打印初始化数据
+            printf("Initialized data for key=0x%02X, addr=0x%08X\n", record.key, write_addr_abs);
+						uint8_t *p = (uint8_t*)&record;
+            EFLASH_PRINT_HEX("record", p, sizeof(record));
+
         }
     }
 
@@ -933,31 +936,33 @@ static kv_data_t* _find_kv_data(uint8_t key) {
 static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr)
 {
     uint8_t record_status = (uint8_t)_get_kv_status_from_table((uint8_t*)record->status_table);
-    if(record_status == EFLASH_KV_DELETED
-    || record_status == EFLASH_KV_PRE_DELETE) {
+    if(record_status == EFLASH_KV_WRITE) {
+        //查找对应的kv_data_t
+        kv_data_t *p_kv_data = _find_kv_data(record->key);
+        if(p_kv_data == NULL){
+            printf("No kv_data_t found for key=0x%02X, addr=0x%08X\n", record->key, abs_addr);
+            return EF_ERR_INVALID;
+        }
+        
+        p_kv_data->addr_abs = abs_addr;
+        p_kv_data->data_type = record->data_type;
+        p_kv_data->value_length = record->value_length;
+        if(record->value_length > KV_MAX_VALUE_SIZE){
+            printf("Value length %d for key=0x%02X exceeds max size %d, addr=0x%08X\n", 
+                record->value_length, record->key, KV_MAX_VALUE_SIZE, abs_addr);
+            return EF_ERR_SIZE_TOO_LONG;
+        }
+        memcpy(p_kv_data->value, record->value, record->value_length);
+        p_kv_data->data_source = KV_DATA_SOURCE_FLASH_READ;
+        //加载的数据和地址
+        printf("Loaded data for key=0x%02X, addr=0x%08X, type=%d, length=%d\n", record->key, abs_addr, record->data_type, record->value_length);
+        EFLASH_PRINT_HEX("value", record->value, record->value_length);
+        return EF_OK;
+    }else{
         //无效记录
         printf("Invalid record status for key=0x%02X, status=%d, addr=0x%08X\n", record->key, record_status, abs_addr);
         return EF_ERR_INVALID;
     }
-
-    //查找对应的kv_data_t
-    kv_data_t *p_kv_data = _find_kv_data(record->key);
-    if(p_kv_data == NULL){
-        printf("No kv_data_t found for key=0x%02X, addr=0x%08X\n", record->key, abs_addr);
-        return EF_ERR_INVALID;
-    }
-    
-    p_kv_data->addr_abs = abs_addr;
-    p_kv_data->data_type = record->data_type;
-    p_kv_data->value_length = record->value_length;
-    if(record->value_length > KV_MAX_VALUE_SIZE){
-        printf("Value length %d for key=0x%02X exceeds max size %d, addr=0x%08X\n", 
-               record->value_length, record->key, KV_MAX_VALUE_SIZE, abs_addr);
-        return EF_ERR_SIZE_TOO_LONG;
-    }
-    memcpy(p_kv_data->value, record->value, record->value_length);
-    p_kv_data->data_source = KV_DATA_SOURCE_FLASH_READ;
-    return EF_OK;
 }
 /* 加载kv记录*/
 EF_ErrCode _load_kv_record(void)
@@ -1373,7 +1378,7 @@ EF_ErrCode embedded_flash_set_string(uint8_t key, const char *value) {
     uint8_t length = strlen(value);
     if (length+1 > KV_MAX_VALUE_SIZE || length == 0) {
         printf("String too long or empty for key=0x%02X, length=%d\n", key, length);
-        return EF_ERR_PARAM;
+        return EF_ERR_SIZE_TOO_LONG;
     }
     // 存储字符串时包含结束符，所以长度+1
     return embedded_flash_set(key, (uint8_t*)value, length+1, EFLASH_FORMAT_STRING);
@@ -1518,13 +1523,15 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
         return EF_ERR_WRITE;
     }
     //如果不相等，那么内部有大于2条数据记录，需要将旧记录设置为删除
-    if(p_kv_data->addr_abs != 0 && p_kv_data->addr_abs != new_write_abs_addr){
+    if((p_kv_data->addr_abs >= KV_SECTOR_START_ADDR && p_kv_data->addr_abs < KV_SECTOR_START_ADDR + KV_SECTOR_SIZE * KV_SECTOR_COUNT) 
+    && (p_kv_data->addr_abs != new_write_abs_addr)){
         //使用状态表机制删除旧记录
         if(_kv_delete_record(p_kv_data->addr_abs) != EF_OK){
             printf("Failed to delete old record at 0x%08X\n", p_kv_data->addr_abs);
-            return EF_ERR_WRITE;
+            // return EF_ERR_WRITE;
         }
     }
+    // printf("length:%d, record.value_length:%d, p_kv_data->value_length:%d\n", length, record.value_length, p_kv_data->value_length);
     //更新最新记录的信息到ram
     p_kv_data->addr_abs = new_write_abs_addr;
     p_kv_data->value_length = record.value_length;
@@ -1534,7 +1541,8 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
 
     printf("Set operation successful for key=0x%02X,addr:0x%x\n", key,new_write_abs_addr);
 
-    
+    // printf("p_kv_data->addr_abs:0x%x\n, ", p_kv_data->addr_abs);
+    // printf("mp_kv_list[0].addr_abs:0x%x, mp_kv_list[0].key:0x%x\n", mp_kv_list[0].addr_abs, mp_kv_list[0].key);
     return EF_OK;
 }
 
@@ -1550,13 +1558,13 @@ static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t
     uint32_t read_addr = p_kv_data->addr_abs;
     if(flash_port_read(read_addr, (uint8_t*)record, sizeof(KV_Record)) != EF_OK){
         printf("Failed to read record at stored address=0x%x for key=0x%02X\n", read_addr, p_kv_data->key);
+			// _load_kv_record();
         return -1;
     }
     EmbeddedFlash_record_status_e record_status = _is_kv_record(record);
     if (record_status == EFLASH_KV_UNUSED){
         printf("Invalid record at stored address=0x%x for key=0x%02X\n", read_addr, p_kv_data->key);
-        // _foreach_sector_record()
-        // printf("No valid record found for key=0x%02X after scanning all sectors\n", p_kv_data->key);
+        
         return -1;
     }
     *addr = read_addr;
@@ -1667,6 +1675,7 @@ EF_ErrCode embedded_flash_delete(uint8_t key)
         return EF_ERR;
     }
     
+    // 清除RAM中的状态
     p_kv_data->addr_abs = 0;
     p_kv_data->data_source = KV_DATA_SOURCE_DEFAULT;
     return EF_OK;

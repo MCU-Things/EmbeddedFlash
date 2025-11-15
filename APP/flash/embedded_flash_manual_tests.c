@@ -65,8 +65,9 @@
             if (ENABLE_TEST_FAIL_PAUSE) { \
                 printf("!!! Program paused due to test failure. Check debugger or reset device. !!!\r\n"); \
                 while(1) { /* 暂停程序，方便调试 */ } \
-            } \
-            return _result; \
+            }else{ \
+                return _result; \
+            }\
         } \
     } while(0) 
 
@@ -124,8 +125,8 @@ static uint64_t test_default_uint64_1 = 0x123456789ABCDEF0ULL;
 static int64_t test_default_int64_1 = -0x123456789ABCDEF0LL;
 static float test_default_float_1 = 3.14159f;
 static bool test_default_bool_1 = true;
-static char test_default_string_1[] = "Default";
-static uint8_t test_default_hex_1[] = {0xAA, 0xBB, 0xCC, 0xDD};
+static char test_default_string_1[KV_MAX_VALUE_SIZE];
+static uint8_t test_default_hex_1[KV_MAX_VALUE_SIZE];
 
 // 测试用的键值对配置 - 覆盖所有数据类型
 // 使用宏定义键值，提高代码可维护性
@@ -170,6 +171,15 @@ void tearDown(void) {
  * @brief 测试套件开始前的设置函数
  * 在整个测试套件运行前调用一次
  */
+ /* ==================== 辅助函数 ==================== */
+/**
+ * @brief 初始化测试用的Flash
+ */
+static EF_ErrCode test_embedded_flash_init_helper(void) {
+    printf("test_embedded_flash_init_helper\n");
+    uint8_t count = sizeof(test_kvs) / sizeof(kv_data_t);
+    return embedded_flash_init(test_kvs, count);
+}
 void suiteSetUp(void) {
     // 测试套件开始前的初始化
     // 例如：初始化Flash端口、擦除测试区域等
@@ -182,8 +192,7 @@ void suiteSetUp(void) {
     }
     
     // 初始化EmbeddedFlash模块
-    uint8_t count = sizeof(test_kvs) / sizeof(kv_data_t);
-    err = embedded_flash_init(test_kvs, count);
+    err = test_embedded_flash_init_helper();
     if (err != EF_OK) {
         printf("Warning: EmbeddedFlash init failed with error code: %d\n", err);
     }
@@ -205,14 +214,7 @@ int suiteTearDown(int num_failures) {
     return num_failures;
 }
 
-/* ==================== 辅助函数 ==================== */
-/**
- * @brief 初始化测试用的Flash
- */
-static int test_embedded_flash_init_helper(void) {
-    uint8_t count = sizeof(test_kvs) / sizeof(kv_data_t);
-    return embedded_flash_init(test_kvs, count);
-}
+
 
 /* ==================== 测试用例函数 ==================== */
 /**
@@ -589,17 +591,17 @@ void test_embedded_flash_error_null_pointer(void) {
     uint8_t len = 0;
     uint8_t data_type = 0;
     
-    // 测试NULL缓冲区
+    // 测试NULL缓冲区 - 应该返回EF_ERR_PARAM
     EF_ErrCode err = embedded_flash_get(TEST_UINT8_1_A1_161, NULL, &len, &data_type);
-    TEST_ASSERT_NOT_EQUAL_INT(EF_OK, err);
+    TEST_ASSERT_EQUAL_INT(EF_ERR_PARAM, err);
     
-    // 测试NULL字符串
+    // 测试NULL字符串 - 应该返回EF_ERR_PARAM
     err = embedded_flash_set_string(TEST_STRING_8_A5_165, NULL);
-    TEST_ASSERT_NOT_EQUAL_INT(EF_OK, err);
+    TEST_ASSERT_EQUAL_INT(EF_ERR_PARAM, err);
     
-    // 测试NULL HEX数据
+    // 测试NULL HEX数据 - 应该返回EF_ERR_PARAM
     err = embedded_flash_set_hex(TEST_HEX_4_A6_166, NULL, 5);
-    TEST_ASSERT_NOT_EQUAL_INT(EF_OK, err);
+    TEST_ASSERT_EQUAL_INT(EF_ERR_PARAM, err);
     //CHECK_FAIL_AND_STOP(); // 检查失败并停止
 }
 
@@ -610,7 +612,7 @@ void test_embedded_flash_error_oversize_data(void) {
     // 测试超长字符串
     char long_string[20] = "This is too long";
     EF_ErrCode err = embedded_flash_set_string(TEST_STRING_8_A5_165, long_string);
-    TEST_ASSERT_NOT_EQUAL_INT(EF_OK, err);
+    TEST_ASSERT_EQUAL_INT(EF_ERR_SIZE_TOO_LONG, err);
     
     // 测试超长HEX数据
     uint8_t long_data[20] = {0};
@@ -746,7 +748,7 @@ void test_embedded_flash_max_length_data(void) {
  */
 void test_embedded_flash_stress_test(void) {
     // 定义压力测试参数
-    #define STRESS_TEST_OPERATIONS 100  // 压力测试操作次数
+    #define STRESS_TEST_OPERATIONS 2000  // 压力测试操作次数
     // 直接使用 test_kvs 做轮询，去除中间 test_keys 数组，进一步降低耦合与复杂度
     uint8_t num_test_keys = (uint8_t)(sizeof(test_kvs) / sizeof(test_kvs[0]));
     if (num_test_keys == 0) {
@@ -1189,8 +1191,8 @@ int RunAllTests(void) {
     UnityPrint("\n========== Running Advanced Tests ==========\n");
     test_group_advanced();
     
-    // UnityPrint("\n========== Running Stress Tests ==========\n");
-    // test_group_stress();
+    UnityPrint("\n========== Running Stress Tests ==========\n");
+    test_group_stress();
     
     int failures = UnityEnd();
 		printf("*********failures:%d **************\r\n",failures);
@@ -1303,3 +1305,7 @@ int embedded_flash_quick_manual_test(void) {
  *    - 使用有意义的测试函数名和断言消息
  *    - 如果测试需要特定的Flash状态，在setUp()中初始化
  */
+	
+	
+ 
+ 

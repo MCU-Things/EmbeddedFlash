@@ -39,31 +39,31 @@
 /* 统一以 EF_ 前缀命名 */
 typedef enum {
     EF_OK = 0,                 /* 成功 */
-    EF_ERR_PARAM,              /* 参数非法 */
-    EF_ERR_ADDR_RANGE,         /* 地址越界 */
-    EF_ERR_ADDR_ALIGN,         /* 地址未按要求对齐 */
-    EF_ERR_SIZE_ZERO,          /* 大小为0 */
-    EF_ERR_SIZE_TOO_LONG,      /* 大小超出最大限制 */
-    EF_ERR_SIZE_ALIGN,         /* 大小未按要求对齐 */
-    EF_ERR_LOCKED,             /* Flash处于锁定状态 */
-    EF_ERR_BUSY,               /* Flash忙 */
-    EF_ERR_TIMEOUT,            /* 操作超时 */
-    EF_ERR_PROTECTION,         /* 写保护/选项字限制 */
-    EF_ERR_ERASE,              /* 擦除失败 */
-    EF_ERR_WRITE,              /* 写入失败 */
-    EF_ERR_READ,               /* 读取失败 */
-    EF_ERR_INVALID,            /* 无效数据 */
-    EF_ERR_VERIFY,             /* 写后校验失败 */
-    EF_ERR_CRC,                /* CRC校验失败 */
-    EF_ERR_STATE,              /* 状态机/状态表非法 */
-    EF_ERR_NOT_INIT,           /* 组件未初始化 */
-    EF_ERR_NOT_FOUND,          /* 目标未找到（如键不存在） */
-    EF_ERR_NO_SPACE,           /* 空间不足 */
-    EF_ERR_FORMAT,             /* 结构/格式错误（头损坏等） */
-    EF_ERR_IO,                 /* 底层IO错误（未知端口错误泛化） */
-    EF_ERR_ALREADY,            /* 状态已满足/重复操作 */
-    EF_ERR,                    /* 通用错误（未归类时返回） */
-    EF_ERR_UNKNOWN             /* 未知错误 */
+    EF_ERR_PARAM=1,              /* 参数非法 */
+    EF_ERR_ADDR_RANGE=2,         /* 地址越界 */
+    EF_ERR_ADDR_ALIGN=3,         /* 地址未按要求对齐 */
+    EF_ERR_SIZE_ZERO=4,          /* 大小为0 */
+    EF_ERR_SIZE_TOO_LONG=5,      /* 大小超出最大限制 */
+    EF_ERR_SIZE_ALIGN=6,         /* 大小未按要求对齐 */
+    EF_ERR_LOCKED=7,             /* Flash处于锁定状态 */
+    EF_ERR_BUSY=8,               /* Flash忙 */
+    EF_ERR_TIMEOUT=9,            /* 操作超时 */
+    EF_ERR_PROTECTION=10,         /* 写保护/选项字限制 */
+    EF_ERR_ERASE=11,              /* 擦除失败 */
+    EF_ERR_WRITE=12,              /* 写入失败 */
+    EF_ERR_READ=13,               /* 读取失败 */
+    EF_ERR_INVALID=14,            /* 无效数据 */
+    EF_ERR_VERIFY=15,             /* 写后校验失败 */
+    EF_ERR_CRC=16,                /* CRC校验失败 */
+    EF_ERR_STATE=17,              /* 状态机/状态表非法 */
+    EF_ERR_NOT_INIT=18,           /* 组件未初始化 */
+    EF_ERR_NOT_FOUND=19,          /* 目标未找到（如键不存在） */
+    EF_ERR_NO_SPACE=20,           /* 空间不足 */
+    EF_ERR_FORMAT=21,             /* 结构/格式错误（头损坏等） */
+    EF_ERR_IO=22,                 /* 底层IO错误（未知端口错误泛化） */
+    EF_ERR_ALREADY=23,            /* 状态已满足/重复操作 */
+    EF_ERR=24,                    /* 通用错误（未归类时返回） */
+    EF_ERR_UNKNOWN=25             /* 未知错误 */
 } EF_ErrCode;
 
 /* ==================== 数据类型枚举 ==================== */
@@ -192,6 +192,7 @@ typedef struct {
 typedef struct {
     uint32_t addr_abs;      // 记录在Flash中的绝对地址，用于快速定位当前的读写地址
     uint8_t key;            // 键
+    //使用指针有个不好的地方，如果外部定义的长度过小，会导致溢出，
     void *value;            // 默认值指针
     uint8_t value_length;   // 默认值长度
     uint8_t data_type;      // 数据类型
