@@ -65,7 +65,7 @@ static embedded_flash_att_status_t embedded_flash_get_attr_status(void);
 
 /* ---  KV记录操作 --- */
 static EmbeddedFlash_record_status_e _is_kv_record(const KV_Record *record);
-static EF_ErrCode _kv_delete_record(uint32_t addr);
+static EF_ErrCode _kv_delete_record(uint32_t addr, EmbeddedFlash_record_status_e status);
 static kv_data_t* _find_kv_data(uint8_t key);
 static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t *addr);
 
@@ -82,7 +82,7 @@ static EF_ErrCode ef_embedded_flash_gc(void);
 static EF_ErrCode _init_all_kv_record(void);
 static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_addr));
 static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr);
-
+static EF_ErrCode _load_kv_record(void);
 /* ---  核心API实现 --- */
 static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type);
 
@@ -965,7 +965,7 @@ static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr)
     }
 }
 /* 加载kv记录*/
-EF_ErrCode _load_kv_record(void)
+static EF_ErrCode _load_kv_record(void)
 {
     printf("EmbeddedFlash: Loading all KV records...\n");
     return _iteration(_load_kv_record_callback);
@@ -1038,7 +1038,7 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
         }
         
         // 只处理PRE_WRITE和WRITE状态的记录
-        if (record_status == EFLASH_KV_PRE_WRITE || record_status == EFLASH_KV_WRITE) {
+        if (/*record_status == EFLASH_KV_PRE_WRITE || */record_status == EFLASH_KV_WRITE) {
             printf("Found record to migrate: key=0x%02X, status=%d, addr=0x%08X\n", 
                    record.key, record_status, source_sector_start_addr);
             
@@ -1061,6 +1061,13 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
                 return EF_ERR_WRITE;
             }
             
+            // 将源扇区中的原记录标记为预删除
+            if (_kv_delete_record(source_sector_start_addr, EFLASH_KV_PRE_DELETE) != EF_OK) {
+                printf("Failed to delete original record at 0x%08X\n", source_sector_start_addr);
+                EFLASH_ASSERT(0);
+                return EF_ERR_WRITE;
+            }
+
             // 将新记录标记为WRITE状态
             if (_write_kv_status(new_record_addr, EFLASH_KV_WRITE) != EF_OK) {
                 printf("Failed to set WRITE status for migrated record at 0x%08X\n", new_record_addr);
@@ -1068,8 +1075,8 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
                 return EF_ERR_WRITE;
             }
             
-            // 将源扇区中的原记录标记为删除
-            if (_kv_delete_record(source_sector_start_addr) != EF_OK) {
+            // 将源扇区中的原记录标记为已删除
+            if (_kv_delete_record(source_sector_start_addr, EFLASH_KV_DELETED) != EF_OK) {
                 printf("Failed to delete original record at 0x%08X\n", source_sector_start_addr);
                 EFLASH_ASSERT(0);
                 return EF_ERR_WRITE;
@@ -1402,24 +1409,30 @@ EF_ErrCode embedded_flash_set_hex(uint8_t key, const uint8_t *value, uint8_t len
  *       1. 标记为PRE_DELETE（写入addr+8）
  *       2. 标记为DELETED（写入addr+12）
  */
-static EF_ErrCode _kv_delete_record(uint32_t addr)
+static EF_ErrCode _kv_delete_record(uint32_t addr, EmbeddedFlash_record_status_e status)
 {
     EF_ErrCode result = EF_OK;
     uint8_t status_table[KV_STATUS_TABLE_SIZE];
-    
-    /* 阶段1：标记为"预删除" */
-    result = _write_kv_status(addr, EFLASH_KV_PRE_DELETE);
+
+    result = _write_kv_status(addr, status);
     if (result != EF_OK) {
-        printf("Failed to mark as PRE_DELETE for addr=0x%x, result=%d\n", addr, result);
+        printf("Failed to mark as %d for addr=0x%x, result=%d\n", status, addr, result);
         return result;
     }
     
-    /* 阶段2：标记为"已删除" */
-    result = _write_kv_status(addr, EFLASH_KV_DELETED);
-    if (result != EF_OK) {
-        printf("Failed to mark as DELETED for addr=0x%x, result=%d\n", addr, result);
-        return result;
-    }
+    // /* 阶段1：标记为"预删除" */
+    // result = _write_kv_status(addr, EFLASH_KV_PRE_DELETE);
+    // if (result != EF_OK) {
+    //     printf("Failed to mark as PRE_DELETE for addr=0x%x, result=%d\n", addr, result);
+    //     return result;
+    // }
+    
+    // /* 阶段2：标记为"已删除" */
+    // result = _write_kv_status(addr, EFLASH_KV_DELETED);
+    // if (result != EF_OK) {
+    //     printf("Failed to mark as DELETED for addr=0x%x, result=%d\n", addr, result);
+    //     return result;
+    // }
     
     return EF_OK;
 }
@@ -1509,28 +1522,49 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
         return EF_ERR_PARAM;
     }
     
-    // 写入记录（使用状态表机制实现分阶段提交）
+    // ==================== 断电安全写入流程 ====================
+    // 流程:  |新 PRE_WRITE |   →  | 新 PRE_WRITE |    →  |  新  WRITE | 
+    //        |旧  WRITE   |   →  | 旧 PRE_DELETE |   →  | 旧 PRE_DELETE |   →   | 旧 DELETED | 
+    // 断电安全性保证：
+    // 1. 如果在新记录标记为WRITE之前断电：新记录是PRE_WRITE状态，旧记录（如果有）是WRITE状态，
+    //    至少还有一个WRITE状态的记录，加载时会使用旧记录。
+    // 2. 如果在新记录标记为WRITE之后断电：新记录是WRITE状态，旧记录可能是WRITE或PRE_DELETE状态，
+    //    至少有一个WRITE状态的记录，加载时会使用新记录（地址更新）。
+    // 3. 如果旧记录是PRE_DELETE状态，加载时会忽略它（只加载WRITE状态的记录）。
+    
+    // 步骤1：写入新记录（状态为PRE_WRITE）
     uint32_t new_write_abs_addr = _write_kv_record(&record);
     if(new_write_abs_addr == 0){
 		printf("_write_kv_record fail\r\n");
         return EF_ERR_WRITE;
     }
 
-    // 使用类型安全函数将新记录标记为WRITE状态
+    bool is_update_record_status = (p_kv_data->addr_abs >= KV_SECTOR_START_ADDR && p_kv_data->addr_abs < KV_SECTOR_START_ADDR + KV_SECTOR_SIZE * KV_SECTOR_COUNT) 
+    && (p_kv_data->addr_abs != new_write_abs_addr)?true:false;
+    // 步骤2：预删除删除旧记录（如果存在且地址不同）
+    if(is_update_record_status){
+        if(_kv_delete_record(p_kv_data->addr_abs, EFLASH_KV_PRE_DELETE) != EF_OK){
+            printf("Failed to pre delete old record at 0x%08X\n", p_kv_data->addr_abs);
+            // return EF_ERR_WRITE;
+        }
+    }
+    // 步骤3：将新记录标记为WRITE状态（关键步骤：确保新记录有效）
+    // 如果这一步失败，旧记录仍然有效，保证至少有一个WRITE状态的记录
     if(_write_kv_status(new_write_abs_addr, EFLASH_KV_WRITE) != EF_OK){
 		printf("write EFLASH_KV_WRITE fail\r\n");
         EFLASH_ASSERT(0);
         return EF_ERR_WRITE;
     }
-    //如果不相等，那么内部有大于2条数据记录，需要将旧记录设置为删除
-    if((p_kv_data->addr_abs >= KV_SECTOR_START_ADDR && p_kv_data->addr_abs < KV_SECTOR_START_ADDR + KV_SECTOR_SIZE * KV_SECTOR_COUNT) 
-    && (p_kv_data->addr_abs != new_write_abs_addr)){
-        //使用状态表机制删除旧记录
-        if(_kv_delete_record(p_kv_data->addr_abs) != EF_OK){
+    
+    // 步骤4：删除删除旧记录（如果存在且地址不同）
+    // 注意：删除失败不影响数据完整性，因为新记录已经是WRITE状态
+    if(is_update_record_status){
+        if(_kv_delete_record(p_kv_data->addr_abs, EFLASH_KV_DELETED) != EF_OK){
             printf("Failed to delete old record at 0x%08X\n", p_kv_data->addr_abs);
             // return EF_ERR_WRITE;
         }
     }
+
     // printf("length:%d, record.value_length:%d, p_kv_data->value_length:%d\n", length, record.value_length, p_kv_data->value_length);
     //更新最新记录的信息到ram
     p_kv_data->addr_abs = new_write_abs_addr;
@@ -1562,9 +1596,8 @@ static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t
         return -1;
     }
     EmbeddedFlash_record_status_e record_status = _is_kv_record(record);
-    if (record_status == EFLASH_KV_UNUSED){
+    if (record_status != EFLASH_KV_WRITE){
         printf("Invalid record at stored address=0x%x for key=0x%02X\n", read_addr, p_kv_data->key);
-        
         return -1;
     }
     *addr = read_addr;
@@ -1670,7 +1703,7 @@ EF_ErrCode embedded_flash_delete(uint8_t key)
     }
     
     // 使用状态表机制删除记录
-    if(_kv_delete_record(p_kv_data->addr_abs) != EF_OK){
+    if(_kv_delete_record(p_kv_data->addr_abs, EFLASH_KV_DELETED) != EF_OK){
         EFLASH_ASSERT(0);
         return EF_ERR;
     }
