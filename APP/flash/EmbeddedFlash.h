@@ -33,6 +33,9 @@ EF_ErrCode embedded_flash_get(uint8_t key, uint8_t *value, uint8_t *length, uint
 // 删除函数
 EF_ErrCode embedded_flash_delete(uint8_t key);
 
+// 垃圾回收函数
+EF_ErrCode embedded_flash_gc(void);
+
 // 扇区擦除统计相关API
 #if EFLASH_ENABLE_ERASE_COUNTER
 // 获取擦除统计信息

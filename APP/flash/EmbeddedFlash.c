@@ -76,7 +76,7 @@ static uint32_t _write_kv_record(KV_Record *p);
 
 /* ---  数据迁移和垃圾回收（GC） --- */
 static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target_sector_idx);
-static EF_ErrCode ef_embedded_flash_gc(void);
+
 
 /* ---  初始化和加载 --- */
 static EF_ErrCode _init_all_kv_record(void);
@@ -653,7 +653,7 @@ restart_write:
     sector_idx = _find_writable_data_sector(sizeof(KV_Record));
     if (sector_idx < 0) {
         // 所有数据扇区都满了，需要GC
-        if (ef_embedded_flash_gc() != EF_OK) {
+        if (embedded_flash_gc() != EF_OK) {
             printf("Failed to perform GC for writing record\n");
             return 0;  // 返回0表示失败
         }
@@ -1082,6 +1082,17 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
                 return EF_ERR_WRITE;
             }
             
+            //更新ram中的地址
+            kv_data_t *p_kv_data = _find_kv_data(record.key);
+            if(p_kv_data != NULL){
+                p_kv_data->addr_abs = new_record_addr;
+                p_kv_data->data_source = KV_DATA_SOURCE_FLASH_READ;
+                printf("Updated kv_data_t address for key=0x%02X to 0x%08X\n", record.key, new_record_addr);
+            }else{
+                printf("No kv_data_t found for key=0x%02X\n", record.key);
+                EFLASH_ASSERT(0);
+            }
+
             printf("Record migrated: key=0x%02X, from 0x%08X to 0x%08X\n", 
                    record.key, source_sector_start_addr, new_record_addr);
             migrated_count++;
@@ -1156,7 +1167,7 @@ static int _find_sector_role(uint8_t role)
     return -1;
 }
 /* GC操作 */
-EF_ErrCode ef_embedded_flash_gc(void)
+EF_ErrCode embedded_flash_gc(void)
 {
     printf("GC operation started\n");
     embedded_flash_att_status_t status = embedded_flash_get_attr_status();

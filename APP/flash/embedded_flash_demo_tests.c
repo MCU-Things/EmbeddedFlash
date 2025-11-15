@@ -21,10 +21,10 @@ uint32_t HAL_GetTick(void) {
     return ms_tick;
 }
 
-// SysTick中断处理函数（需要在中断向量表中配置）
-void SysTick_Handler(void) {
-    ms_tick++;
-}
+//// SysTick中断处理函数（需要在中断向量表中配置）
+//void SysTick_Handler(void) {
+//    ms_tick++;
+//}
 
 
 static void print_pass(const char *msg) { printf("[OK] PASS - %s\n", msg); }

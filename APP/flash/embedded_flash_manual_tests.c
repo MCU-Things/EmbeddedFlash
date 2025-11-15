@@ -636,9 +636,9 @@ void test_embedded_flash_error_zero_length(void) {
  * @brief 测试用例：批量读写测试
  */
 void test_embedded_flash_batch_read_write(void) {
-    uint8_t buf[KV_MAX_VALUE_SIZE];
-    uint8_t len = 0;
-    uint8_t data_type = 0;
+    uint8_t read_buf[KV_MAX_VALUE_SIZE];
+    uint8_t read_len = 0;
+    uint8_t read_data_type = 0;
     
     // 批量写入多种数据类型
     EF_ErrCode err;
@@ -659,25 +659,25 @@ void test_embedded_flash_batch_read_write(void) {
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
     
     // 验证所有数据
-    err = embedded_flash_get(TEST_UINT8_1_A1_161, buf, &len, &data_type);
+    err = embedded_flash_get(TEST_UINT8_1_A1_161, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_UINT8(10, buf[0]);
+    TEST_ASSERT_EQUAL_UINT8(10, read_buf[0]);
     
-    err = embedded_flash_get(TEST_UINT16_2_A3_163, buf, &len, &data_type);
+    err = embedded_flash_get(TEST_UINT16_2_A3_163, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_UINT16(1000, *(uint16_t*)buf);
+    TEST_ASSERT_EQUAL_UINT16(1000, *(uint16_t*)read_buf);
     
-    err = embedded_flash_get(TEST_INT32_4_A4_164, buf, &len, &data_type);
+    err = embedded_flash_get(TEST_INT32_4_A4_164, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_INT32(-5000, *(int32_t*)buf);
+    TEST_ASSERT_EQUAL_INT32(-5000, *(int32_t*)read_buf);
     
-    err = embedded_flash_get(TEST_STRING_8_A5_165, buf, &len, &data_type);
+    err = embedded_flash_get(TEST_STRING_8_A5_165, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_STRING("TestStr", (char*)buf);
+    TEST_ASSERT_EQUAL_STRING("TestStr", (char*)read_buf);
     
-    err = embedded_flash_get(TEST_HEX_4_A6_166, buf, &len, &data_type);
+    err = embedded_flash_get(TEST_HEX_4_A6_166, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_MEMORY(hex_data, buf, sizeof(hex_data));
+    TEST_ASSERT_EQUAL_MEMORY(hex_data, read_buf, sizeof(hex_data));
     //CHECK_FAIL_AND_STOP(); // 检查失败并停止
 }
 
@@ -686,23 +686,23 @@ void test_embedded_flash_batch_read_write(void) {
  */
 void test_embedded_flash_data_overwrite(void) {
     uint8_t key = TEST_UINT8_1_A1_161;
-    uint8_t buf[KV_MAX_VALUE_SIZE];
-    uint8_t len = 0;
-    uint8_t data_type = 0;
+    uint8_t read_buf[KV_MAX_VALUE_SIZE];
+    uint8_t read_len = 0;
+    uint8_t read_data_type = 0;
     
     // 第一次写入
     EF_ErrCode err = embedded_flash_set_uint8(key, 100);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    err = embedded_flash_get(key, buf, &len, &data_type);
+    err = embedded_flash_get(key, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_UINT8(100, buf[0]);
+    TEST_ASSERT_EQUAL_UINT8(100, read_buf[0]);
     
     // 第二次覆盖写入
     err = embedded_flash_set_uint8(key, 200);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    err = embedded_flash_get(key, buf, &len, &data_type);
+    err = embedded_flash_get(key, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_UINT8(200, buf[0]);
+    TEST_ASSERT_EQUAL_UINT8(200, read_buf[0]);
     //CHECK_FAIL_AND_STOP(); // 检查失败并停止
 }
 
@@ -901,7 +901,8 @@ void test_embedded_flash_stress_test(void) {
         // 检查写入结果
         if (err != EF_OK) {
             write_fail_count++;
-            continue;
+            TEST_ASSERT_EQUAL_INT(EF_OK, err);
+            break;
         }
         
         // 立即读取验证
@@ -911,19 +912,22 @@ void test_embedded_flash_stress_test(void) {
         
         if (err != EF_OK) {
             read_fail_count++;
-            continue;
+            TEST_ASSERT_EQUAL_INT(EF_OK, err);
+            break;
         }
         
         // 验证类型
         if (read_type != data_type) {
             type_fail_count++;
-            continue;
+            TEST_ASSERT_EQUAL_UINT8(data_type, read_type);
+            break;
         }
         
         // 验证长度
         if (read_len != expected_len) {
             len_fail_count++;
-            continue;
+            TEST_ASSERT_EQUAL_UINT8(expected_len, read_len);
+            break;
         }
         
         // 验证数据值
@@ -1012,6 +1016,8 @@ void test_embedded_flash_stress_test(void) {
                     break;
             }
             printf("\n");
+            TEST_ASSERT_EQUAL_INT(0, data_match);
+            break;//停止测试
         }
     }
     
