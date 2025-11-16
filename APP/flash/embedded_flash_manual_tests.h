@@ -22,7 +22,7 @@
 // 测试使能宏定义（可以在项目中定义此宏来启用Unity测试）
 // 默认不启用，需要在项目中定义 EMBEDDED_FLASH_MANUAL_TESTS_ENABLE 来启用
 #ifndef EMBEDDED_FLASH_MANUAL_TESTS_ENABLE
-#define EMBEDDED_FLASH_MANUAL_TESTS_ENABLE (0)
+#define EMBEDDED_FLASH_MANUAL_TESTS_ENABLE (1)
 #endif
 void test_sysTick_init(void);
 uint32_t test_SysTick_GetTick(void);

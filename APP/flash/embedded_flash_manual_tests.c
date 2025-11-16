@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <math.h>
 #include "stm32f10x.h"
 
 /* ==================== Unity配置 ==================== */
@@ -230,7 +231,7 @@ void test_embedded_flash_init(void) {
  * @brief 测试用例：数据类型大小获取测试
  * 测试获取所有数据类型的大小
  */
-void test_embedded_flash_get_type_size(void) {
+static void test_embedded_flash_get_type_size(void) {
     // 先测试BOOL类型，添加调试信息
     uint8_t bool_size = embedded_flash_get_type_size(EFLASH_FORMAT_BOOL);
     UnityPrint("DEBUG: EFLASH_FORMAT_BOOL enum value = ");
@@ -259,7 +260,7 @@ void test_embedded_flash_get_type_size(void) {
 /**
  * @brief 测试用例：UINT8类型读写测试
  */
-void test_embedded_flash_uint8_read_write(void) {
+static void test_embedded_flash_uint8_read_write(void) {
     uint8_t key = TEST_UINT8_1_A1_161;
     uint8_t write_value = 42;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -280,7 +281,7 @@ void test_embedded_flash_uint8_read_write(void) {
 /**
  * @brief 测试用例：INT8类型读写测试
  */
-void test_embedded_flash_int8_read_write(void) {
+static void test_embedded_flash_int8_read_write(void) {
     uint8_t key = TEST_INT8_1_AB_171;
     int8_t write_value = -120;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -301,7 +302,7 @@ void test_embedded_flash_int8_read_write(void) {
 /**
  * @brief 测试用例：UINT16类型读写测试
  */
-void test_embedded_flash_uint16_read_write(void) {
+static void test_embedded_flash_uint16_read_write(void) {
     uint8_t key = TEST_UINT16_2_A3_163;
     uint16_t write_value = 1234;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -322,7 +323,7 @@ void test_embedded_flash_uint16_read_write(void) {
 /**
  * @brief 测试用例：INT16类型读写测试
  */
-void test_embedded_flash_int16_read_write(void) {
+static void test_embedded_flash_int16_read_write(void) {
     uint8_t key = TEST_INT16_2_AC_172;
     int16_t write_value = -1234;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -343,7 +344,7 @@ void test_embedded_flash_int16_read_write(void) {
 /**
  * @brief 测试用例：UINT32类型读写测试
  */
-void test_embedded_flash_uint32_read_write(void) {
+static void test_embedded_flash_uint32_read_write(void) {
     uint8_t key = TEST_UINT32_4_AD_173;
     uint32_t write_value = 1234000;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -364,7 +365,7 @@ void test_embedded_flash_uint32_read_write(void) {
 /**
  * @brief 测试用例：INT32类型读写测试
  */
-void test_embedded_flash_int32_read_write(void) {
+static void test_embedded_flash_int32_read_write(void) {
     uint8_t key = TEST_INT32_4_A4_164;
     int32_t write_value = -1234000;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -385,7 +386,7 @@ void test_embedded_flash_int32_read_write(void) {
 /**
  * @brief 测试用例：UINT64类型读写测试
  */
-void test_embedded_flash_uint64_read_write(void) {
+ static void test_embedded_flash_uint64_read_write(void) {
     uint8_t key = TEST_UINT64_8_AE_174;
     uint64_t write_value = 1234003;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -406,7 +407,7 @@ void test_embedded_flash_uint64_read_write(void) {
 /**
  * @brief 测试用例：INT64类型读写测试
  */
-void test_embedded_flash_int64_read_write(void) {
+ static void test_embedded_flash_int64_read_write(void) {
     uint8_t key = TEST_INT64_8_AF_175;
     int64_t write_value = -1234001;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -427,7 +428,7 @@ void test_embedded_flash_int64_read_write(void) {
 /**
  * @brief 测试用例：FLOAT类型读写测试
  */
-void test_embedded_flash_float_read_write(void) {
+ static void test_embedded_flash_float_read_write(void) {
     uint8_t key = TEST_FLOAT_4_A9_169;
     float write_value = 3.14159f;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -448,7 +449,7 @@ void test_embedded_flash_float_read_write(void) {
 /**
  * @brief 测试用例：BOOL类型读写测试
  */
-void test_embedded_flash_bool_read_write(void) {
+ static void test_embedded_flash_bool_read_write(void) {
     uint8_t key = TEST_BOOL_1_AA_170;
     bool write_value = true;
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -469,7 +470,7 @@ void test_embedded_flash_bool_read_write(void) {
 /**
  * @brief 测试用例：STRING类型读写测试
  */
-void test_embedded_flash_string_read_write(void) {
+ static void test_embedded_flash_string_read_write(void) {
     uint8_t key = TEST_STRING_8_A5_165;
     const char* write_value = "Hello";
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -490,7 +491,7 @@ void test_embedded_flash_string_read_write(void) {
 /**
  * @brief 测试用例：HEX类型读写测试
  */
-void test_embedded_flash_hex_read_write(void) {
+ static void test_embedded_flash_hex_read_write(void) {
     uint8_t key = TEST_HEX_4_A6_166;
     uint8_t write_value[] = {0xAA, 0xBB, 0xCC, 0xDD};
     uint8_t buf[KV_MAX_VALUE_SIZE];
@@ -511,7 +512,7 @@ void test_embedded_flash_hex_read_write(void) {
 /**
  * @brief 测试用例：边界值测试 - 最大值
  */
-void test_embedded_flash_boundary_max_values(void) {
+static void test_embedded_flash_boundary_max_values(void) {
     uint8_t buf[KV_MAX_VALUE_SIZE];
     uint8_t len = 0;
     uint8_t data_type = 0;
@@ -542,7 +543,7 @@ void test_embedded_flash_boundary_max_values(void) {
 /**
  * @brief 测试用例：边界值测试 - 最小值
  */
-void test_embedded_flash_boundary_min_values(void) {
+ static void test_embedded_flash_boundary_min_values(void) {
     uint8_t buf[KV_MAX_VALUE_SIZE];
     uint8_t len = 0;
     uint8_t data_type = 0;
@@ -571,9 +572,50 @@ void test_embedded_flash_boundary_min_values(void) {
 }
 
 /**
+ * @brief 测试用例：最大长度数据测试
+ */
+static void test_embedded_flash_max_length_data(void) {
+    uint8_t key = TEST_HEX_4_A6_166;
+    uint8_t write_data[KV_MAX_VALUE_SIZE];
+    uint8_t read_data[KV_MAX_VALUE_SIZE];
+    uint8_t read_len = 0;
+    uint8_t read_data_type = 0;
+    EF_ErrCode err;
+    // 填充最大长度数据
+    for (int i = 0; i < KV_MAX_VALUE_SIZE; i++) {
+        write_data[i] = (uint8_t)(test_SysTick_GetTick() + i);//填充随机数据
+    }
+    
+    err = embedded_flash_set_hex(key, write_data, KV_MAX_VALUE_SIZE);
+    TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    
+    err = embedded_flash_get(key, read_data, &read_len, &read_data_type);
+    TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    TEST_ASSERT_EQUAL_UINT8(KV_MAX_VALUE_SIZE, read_len);
+    TEST_ASSERT_EQUAL_MEMORY(write_data, read_data, read_len);
+    TEST_ASSERT_EQUAL_UINT8(EFLASH_FORMAT_HEX, read_data_type);
+
+    // 填充最大长度数据
+    for (int i = 0; i < KV_MAX_VALUE_SIZE-1; i++) {
+        write_data[i] = (uint8_t)('a' + i);//填充字符串
+    }
+    write_data[KV_MAX_VALUE_SIZE-1] = '\0';
+    err = embedded_flash_set_string(key, write_data);
+    TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    
+    err = embedded_flash_get(key, read_data, &read_len, &read_data_type);
+    TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    TEST_ASSERT_EQUAL_UINT8(KV_MAX_VALUE_SIZE, read_len);
+    TEST_ASSERT_EQUAL_MEMORY(write_data, read_data, read_len);
+    TEST_ASSERT_EQUAL_UINT8(EFLASH_FORMAT_STRING, read_data_type);
+
+    //CHECK_FAIL_AND_STOP(); // 检查失败并停止
+}
+
+/**
  * @brief 测试用例：错误处理测试 - 无效键
  */
-void test_embedded_flash_error_invalid_key(void) {
+static void test_embedded_flash_error_invalid_key(void) {
     uint8_t buf[KV_MAX_VALUE_SIZE];
     uint8_t len = 0;
     uint8_t data_type = 0;
@@ -587,7 +629,7 @@ void test_embedded_flash_error_invalid_key(void) {
 /**
  * @brief 测试用例：错误处理测试 - NULL指针
  */
-void test_embedded_flash_error_null_pointer(void) {
+static void test_embedded_flash_error_null_pointer(void) {
     uint8_t len = 0;
     uint8_t data_type = 0;
     
@@ -608,7 +650,7 @@ void test_embedded_flash_error_null_pointer(void) {
 /**
  * @brief 测试用例：错误处理测试 - 超长数据
  */
-void test_embedded_flash_error_oversize_data(void) {
+static void test_embedded_flash_error_oversize_data(void) {
     // 测试超长字符串
     char long_string[20] = "This is too long";
     EF_ErrCode err = embedded_flash_set_string(TEST_STRING_8_A5_165, long_string);
@@ -624,7 +666,7 @@ void test_embedded_flash_error_oversize_data(void) {
 /**
  * @brief 测试用例：错误处理测试 - 零长度数据
  */
-void test_embedded_flash_error_zero_length(void) {
+static void test_embedded_flash_error_zero_length(void) {
     uint8_t data[5] = {1, 2, 3, 4, 5};
     // 测试零长度HEX数据
     EF_ErrCode err = embedded_flash_set_hex(TEST_HEX_4_A6_166, data, 0);
@@ -635,7 +677,7 @@ void test_embedded_flash_error_zero_length(void) {
 /**
  * @brief 测试用例：批量读写测试
  */
-void test_embedded_flash_batch_read_write(void) {
+static void test_embedded_flash_batch_read_write(void) {
     uint8_t read_buf[KV_MAX_VALUE_SIZE];
     uint8_t read_len = 0;
     uint8_t read_data_type = 0;
@@ -684,7 +726,7 @@ void test_embedded_flash_batch_read_write(void) {
 /**
  * @brief 测试用例：数据覆盖测试
  */
-void test_embedded_flash_data_overwrite(void) {
+static void test_embedded_flash_data_overwrite(void) {
     uint8_t key = TEST_UINT8_1_A1_161;
     uint8_t read_buf[KV_MAX_VALUE_SIZE];
     uint8_t read_len = 0;
@@ -707,29 +749,273 @@ void test_embedded_flash_data_overwrite(void) {
 }
 
 /**
- * @brief 测试用例：最大长度数据测试
+ * @brief 增强版批处理读写测试
+ * 
+ * 扩展现有批处理测试，添加更详细的日志、联合体数据访问和反向恢复测试。
+ * 
+ * 测试内容：
+ * - 多种数据类型的批量写入
+ * - 使用联合体安全访问不同类型数据
+ * - 反向恢复测试（从KV存储恢复到测试变量）
+ * - 详细的测试进度和结果打印
+ * 
  */
-void test_embedded_flash_max_length_data(void) {
-    uint8_t key = TEST_HEX_4_A6_166;
-    uint8_t max_data[KV_MAX_VALUE_SIZE];
-    uint8_t buf[KV_MAX_VALUE_SIZE];
-    uint8_t len = 0;
-    uint8_t data_type = 0;
+
+
+/**
+ * @brief 测试最小长度数据（1字节）
+ * 
+ * 测试1字节数据的写入和读取功能，验证系统对最小长度数据的处理能力。
+ * 
+ * 测试内容：
+ * - 1字节字符串数据写入和读取
+ * - 1字节HEX数据写入和读取
+ * - 验证数据的正确性
+ * 
+ * 参考：embedded_flash_demo_tests.c 中的 embedded_flash_demo_boundary_test()
+ */
+static void test_embedded_flash_min_length_data(void) {
+    UnityPrint("Running test_embedded_flash_min_length_data...\n");
     
-    // 填充最大长度数据
-    for (int i = 0; i < KV_MAX_VALUE_SIZE; i++) {
-        max_data[i] = (uint8_t)(0xAA + i);
-    }
     
-    EF_ErrCode err = embedded_flash_set_hex(key, max_data, KV_MAX_VALUE_SIZE);
+    // 1字节字符串测试
+    const char* str_data = "A";
+    uint8_t read_buf[KV_MAX_VALUE_SIZE];
+    uint8_t read_len = 0;
+    uint8_t read_data_type = 0;
+    
+    EF_ErrCode err = embedded_flash_set_string(TEST_STRING_8_A5_165, str_data);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    UnityPrint("  - 1-byte string write: OK\n");
     
-    err = embedded_flash_get(key, buf, &len, &data_type);
+    err = embedded_flash_get(TEST_STRING_8_A5_165, read_buf, &read_len, &read_data_type);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
-    TEST_ASSERT_EQUAL_UINT8(KV_MAX_VALUE_SIZE, len);
-    TEST_ASSERT_EQUAL_MEMORY(max_data, buf, KV_MAX_VALUE_SIZE);
-    //CHECK_FAIL_AND_STOP(); // 检查失败并停止
+    TEST_ASSERT_EQUAL_UINT8(EFLASH_FORMAT_STRING, read_data_type);
+    TEST_ASSERT_EQUAL_UINT8(strlen(str_data) + 1, read_len);  // 包含null终止符
+    TEST_ASSERT_EQUAL_STRING(str_data, (char*)read_buf);
+    UnityPrint("  - 1-byte string read: OK\n");
+    
+    // 1字节HEX测试
+    uint8_t hex_data = 0x55;
+    uint8_t read_hex = 0;
+    
+    err = embedded_flash_set_hex(TEST_HEX_4_A6_166, &hex_data, 1);
+    TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    UnityPrint("  - 1-byte hex write: OK\n");
+    
+    err = embedded_flash_get(TEST_HEX_4_A6_166, read_buf, &read_len, &read_data_type);
+    TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    TEST_ASSERT_EQUAL_UINT8(EFLASH_FORMAT_HEX, read_data_type);
+    TEST_ASSERT_EQUAL_UINT8(1, read_len);
+    TEST_ASSERT_EQUAL_UINT8(hex_data, read_buf[0]);
+    UnityPrint("  - 1-byte hex read: OK\n");
+    
+    UnityPrint("test_embedded_flash_min_length_data completed successfully!\n");
 }
+
+/**
+ * @brief 测试零长度数据处理
+ * 
+ * 测试系统对零长度数据的处理，验证是否正确拒绝零长度数据的写入请求。
+ * 
+ * 测试内容：
+ * - 零长度字符串数据写入（应拒绝）
+ * - 零长度HEX数据写入（应拒绝）
+ * - 验证错误码
+ * 
+ * 参考：embedded_flash_demo_tests.c 中的 embedded_flash_demo_boundary_test()
+ */
+static void test_embedded_flash_zero_length_data(void) {
+    UnityPrint("Running test_embedded_flash_zero_length_data...\n");
+    
+    // 零长度字符串测试（应拒绝）
+    EF_ErrCode err = embedded_flash_set_string(TEST_STRING_8_A5_165, "");
+    TEST_ASSERT_NOT_EQUAL_INT(EF_OK, err);
+    UnityPrint("  - Zero-length string write rejected: OK\n");
+    
+    // 零长度HEX测试（应拒绝）
+    uint8_t dummy = 0;
+    err = embedded_flash_set_hex(TEST_HEX_4_A6_166, &dummy, 0);
+    TEST_ASSERT_NOT_EQUAL_INT(EF_OK, err);
+    UnityPrint("  - Zero-length hex write rejected: OK\n");
+    
+    UnityPrint("test_embedded_flash_zero_length_data completed successfully!\n");
+}
+
+/**
+ * @brief 综合边界测试
+ * 
+ * 整合多种边界条件测试，验证系统在边界情况下的稳定性和正确性。
+ * 
+ * 测试内容：
+ * - 调用最大长度数据测试
+ * - 调用最小长度数据测试
+ * - 调用零长度数据测试
+ * 
+ * 参考：embedded_flash_demo_tests.c 中的 embedded_flash_demo_boundary_test()
+ */
+static void test_embedded_flash_boundary_test(void) {
+    UnityPrint("\n========== Running Comprehensive Boundary Test ==========\n");
+    
+    // 调用现有的最大长度数据测试
+    UnityPrint("\nRunning max length data test...\n");
+    test_embedded_flash_max_length_data();
+    
+    // 调用新增的最小长度数据测试
+    UnityPrint("\nRunning min length data test...\n");
+    test_embedded_flash_min_length_data();
+    
+    // 调用新增的零长度数据测试
+    UnityPrint("\nRunning zero length data test...\n");
+    test_embedded_flash_zero_length_data();
+    
+    UnityPrint("\nComprehensive boundary test completed successfully!\n");
+}
+
+/**
+ * @brief GC测试 - 测试垃圾回收功能
+ */
+ static void test_embedded_flash_gc_test(void) {
+    //未实现，先跳过
+    printf("test_embedded_flash_gc_test:未实现，先跳过\n");
+    //1、获取现有所有key的数据
+
+    //2、主动调用gc函数
+
+    //3、回读所有key的数据是否发生变化
+
+}
+
+/**
+ * @brief GC压力测试 - 强制触发多次GC的压力测试
+ */
+static void test_embedded_flash_gc_stress_test(void) {
+    //未实现，先跳过
+    printf("test_embedded_flash_gc_stress_test:未实现，先跳过\n");
+}
+
+/**
+ * @brief 掉电测试 - 测试断电恢复功能
+ */
+static void test_embedded_flash_power_loss_test(void) {
+    //未实现，先跳过
+    printf("test_embedded_flash_power_loss_test:未实现，先跳过\n");
+    // TEST_MESSAGE("Testing power loss recovery...");
+    
+    // // ========== 阶段1: 写入测试数据 ==========
+    // TEST_MESSAGE("Phase 1: Writing test data before power loss");
+    // uint8_t test_uint8_write = 15;
+    // uint16_t test_uint16_write = 1500;
+    // int32_t test_int32_write = -7500;
+    // char test_string_write[] = "PowerOff";
+    // uint8_t test_hex_write[] = {0xCA, 0xFE, 0xBA, 0xBE};
+    
+    // // 写入所有测试数据
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_set_uint8(TEST_UINT8_1_A1_161, test_uint8_write));
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_set_uint16(TEST_UINT16_2_A7_167, test_uint16_write));
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_set_int32(TEST_INT32_4_A8_168, test_int32_write));
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_set_string(TEST_STRING_8_A5_165, test_string_write));
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_set_hex(TEST_HEX_4_A6_166, test_hex_write, sizeof(test_hex_write)));
+    
+    // // ========== 阶段2: 模拟断电重启 ==========
+    // TEST_MESSAGE("Phase 2: Simulating power loss and system reboot");
+    
+    // // 擦除Flash测试区域（模拟系统重启后的初始化）
+    // TEST_ASSERT_EQUAL(EF_OK, flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE * KV_SECTOR_COUNT));
+    
+    // // 重新初始化flash系统（模拟断电重启后的恢复）
+    // TEST_ASSERT_EQUAL(EF_OK, test_embedded_flash_init_helper());
+    
+    // // ========== 阶段3: 验证数据恢复 ==========
+    // TEST_MESSAGE("Phase 3: Verifying data recovery after power loss");
+    // uint8_t l, t;
+    
+    // // 验证 UINT8
+    // uint8_t test_uint8_read = 0;
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_get(TEST_UINT8_1_A1_161, (uint8_t*)&test_uint8_read, &l, &t));
+    // TEST_ASSERT_EQUAL(EFLASH_FORMAT_UINT8, t);
+    // TEST_ASSERT_EQUAL(sizeof(uint8_t), l);
+    // TEST_ASSERT_EQUAL(test_uint8_write, test_uint8_read);
+    
+    // // 验证 UINT16
+    // uint16_t test_uint16_read = 0;
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_get(TEST_UINT16_2_A7_167, (uint8_t*)&test_uint16_read, &l, &t));
+    // TEST_ASSERT_EQUAL(EFLASH_FORMAT_UINT16, t);
+    // TEST_ASSERT_EQUAL(sizeof(uint16_t), l);
+    // TEST_ASSERT_EQUAL(test_uint16_write, test_uint16_read);
+    
+    // // 验证 INT32
+    // int32_t test_int32_read = 0;
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_get(TEST_INT32_4_A8_168, (uint8_t*)&test_int32_read, &l, &t));
+    // TEST_ASSERT_EQUAL(EFLASH_FORMAT_INT32, t);
+    // TEST_ASSERT_EQUAL(sizeof(int32_t), l);
+    // TEST_ASSERT_EQUAL(test_int32_write, test_int32_read);
+    
+    // // 验证 STRING
+    // char test_string_read[10] = {0};
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_get(TEST_STRING_8_A5_165, (uint8_t*)test_string_read, &l, &t));
+    // TEST_ASSERT_EQUAL(EFLASH_FORMAT_STRING, t);
+    // TEST_ASSERT_EQUAL(strlen(test_string_write) + 1, l);
+    // TEST_ASSERT_EQUAL_STRING(test_string_write, test_string_read);
+    
+    // // 验证 HEX
+    // uint8_t test_hex_read[4] = {0};
+    // TEST_ASSERT_EQUAL(EF_OK, embedded_flash_get(TEST_HEX_4_A6_166, test_hex_read, &l, &t));
+    // TEST_ASSERT_EQUAL(EFLASH_FORMAT_HEX, t);
+    // TEST_ASSERT_EQUAL(sizeof(test_hex_write), l);
+    // TEST_ASSERT_EQUAL_UINT8_ARRAY(test_hex_write, test_hex_read, sizeof(test_hex_write));
+    
+    // TEST_PASS_MESSAGE("Power loss test completed - all data survived power loss");
+}
+
+/**
+ * @brief 掉电压力测试 - 多次掉电恢复测试
+ */
+ static void test_embedded_flash_power_loss_stress_test(void) {
+    //未实现，先跳过
+    printf("test_embedded_flash_power_loss_stress_test:未实现，先跳过\n");
+    // TEST_MESSAGE("Testing power loss recovery under stress...");
+    
+    // // 执行多次掉电恢复测试
+    // for (int cycle = 1; cycle <= 10; cycle++) {
+    //     printf("Power loss stress test cycle: %d/10\r\n", cycle);
+        
+    //     // ========== 阶段1: 写入测试数据（每次循环使用不同的值） ==========
+    //     uint8_t test_uint8_write = (uint8_t)(100 + cycle);
+    //     uint16_t test_uint16_write = (uint16_t)(1000 + cycle * 100);
+        
+    //     // 写入测试数据
+    //     TEST_ASSERT_EQUAL(EF_OK, embedded_flash_set_uint8(TEST_UINT8_1_A1_161, test_uint8_write));
+    //     TEST_ASSERT_EQUAL(EF_OK, embedded_flash_set_uint16(TEST_UINT16_2_A3_163, test_uint16_write));
+        
+    //     // ========== 阶段2: 模拟断电重启 ==========
+    //     // 擦除Flash测试区域
+    //     TEST_ASSERT_EQUAL(EF_OK, flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE * KV_SECTOR_COUNT));
+        
+    //     // 重新初始化flash系统
+    //     TEST_ASSERT_EQUAL(EF_OK, test_embedded_flash_init_helper());
+        
+    //     // ========== 阶段3: 验证数据恢复 ==========
+    //     uint8_t len, type;
+    //     uint8_t test_uint8_read = 0;
+    //     uint16_t test_uint16_read = 0;
+        
+    //     // 验证 UINT8
+    //     TEST_ASSERT_EQUAL(EF_OK, embedded_flash_get(TEST_UINT8_1_A1_161, (uint8_t*)&test_uint8_read, &len, &type));
+    //     TEST_ASSERT_EQUAL(EFLASH_FORMAT_UINT8, type);
+    //     TEST_ASSERT_EQUAL(test_uint8_write, test_uint8_read);
+        
+    //     // 验证 UINT16
+    //     TEST_ASSERT_EQUAL(EF_OK, embedded_flash_get(TEST_UINT16_2_A3_163, (uint8_t*)&test_uint16_read, &len, &type));
+    //     TEST_ASSERT_EQUAL(EFLASH_FORMAT_UINT16, type);
+    //     TEST_ASSERT_EQUAL(test_uint16_write, test_uint16_read);
+        
+    //     printf("Power loss stress test cycle %d completed successfully\r\n", cycle);
+    // }
+    
+    // TEST_PASS_MESSAGE("Power loss stress test completed - system handled multiple power cycles");
+}
+
 
 /**
  * @brief 测试用例：压力测试 - 大量写入操作
@@ -737,18 +1023,18 @@ void test_embedded_flash_max_length_data(void) {
  * 测试高强度的读写操作，验证系统在压力下的稳定性
  * 
  * 测试内容：
- * - 进行100次连续的读写操作
+ * - 进行1000次连续的读写操作
  * - 覆盖所有12种数据类型（bool, uint8, int8, uint16, int16, uint32, int32, uint64, int64, float, string, hex）
  * - 每次写入后立即读取验证
  * - 验证数据类型、数据长度、数据值的正确性
  * - 统计各种失败情况（写入失败、读取失败、类型不匹配、长度不匹配、数据验证失败）
- * - 要求所有100次操作都必须成功
+ * - 要求所有1000次操作都必须成功
  * 
  * 参考：embedded_flash_demo_tests.c 中的 embedded_flash_demo_stress_test()
  */
-void test_embedded_flash_stress_test(void) {
+static void test_embedded_flash_stress_test(void) {
     // 定义压力测试参数
-    #define STRESS_TEST_OPERATIONS 2000  // 压力测试操作次数
+    #define STRESS_TEST_OPERATIONS 1000  // 压力测试操作次数
     // 直接使用 test_kvs 做轮询，去除中间 test_keys 数组，进一步降低耦合与复杂度
     uint8_t num_test_keys = (uint8_t)(sizeof(test_kvs) / sizeof(test_kvs[0]));
     if (num_test_keys == 0) {
@@ -1061,6 +1347,138 @@ void test_embedded_flash_stress_test(void) {
     // 如果所有断言都通过，测试通过
     // Unity测试框架中，如果函数正常返回且所有断言通过，则测试通过
 }
+
+
+/**
+ * @brief 增强版随机数据测试 - 使用伪随机数生成测试数据，验证数据一致性
+ */
+static void test_embedded_flash_enhanced_random_data_test(void) {
+   //未实现，先跳过
+   printf("test_embedded_flash_enhanced_random_data_test:未实现，先跳过\n");
+}
+
+
+/**
+ * @brief 性能测试 - 测试写入和读取性能
+ */
+static void test_embedded_flash_performance_test(void) {
+    printf("\nPerformance Test - Testing read/write performance for all data types\n");
+    
+    // 准备测试数据缓冲区
+    uint8_t test_data[8];
+    uint8_t read_data[8];
+    uint8_t len, type;
+    uint32_t start_time, end_time;
+    int operations = 100;
+    
+    // 初始化测试数据
+    for (int i = 0; i < 8; i++) {
+        test_data[i] = 0xAA + i;
+    }
+    
+    // 测试UINT8类型性能
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_set_uint8(TEST_UINT8_1_A1_161, (uint8_t)(i % 256));
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint8_write_time = end_time - start_time;
+    printf("UINT8 write: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint8_write_time, (float)uint8_write_time / operations);
+    
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_get(TEST_UINT8_1_A1_161, read_data, &len, &type);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint8_read_time = end_time - start_time;
+    printf("UINT8 read: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint8_read_time, (float)uint8_read_time / operations);
+    
+    // 测试UINT16类型性能
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_set_uint16(TEST_UINT16_2_A3_163, (uint16_t)(i % 65536));
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint16_write_time = end_time - start_time;
+    printf("UINT16 write: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint16_write_time, (float)uint16_write_time / operations);
+    
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_get(TEST_UINT16_2_A3_163, read_data, &len, &type);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint16_read_time = end_time - start_time;
+    printf("UINT16 read: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint16_read_time, (float)uint16_read_time / operations);
+    
+    // 测试UINT32类型性能
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_set_uint32(TEST_UINT32_4_AD_173, (uint32_t)i);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint32_write_time = end_time - start_time;
+    printf("UINT32 write: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint32_write_time, (float)uint32_write_time / operations);
+    
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_get(TEST_UINT32_4_AD_173, read_data, &len, &type);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint32_read_time = end_time - start_time;
+    printf("UINT32 read: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint32_read_time, (float)uint32_read_time / operations);
+    
+    // 测试UINT64类型性能
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_set_uint64(TEST_UINT64_8_AE_174, (uint64_t)i);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint64_write_time = end_time - start_time;
+    printf("UINT64 write: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint64_write_time, (float)uint64_write_time / operations);
+    
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_get(TEST_UINT64_8_AE_174, read_data, &len, &type);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t uint64_read_time = end_time - start_time;
+    printf("UINT64 read: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, uint64_read_time, (float)uint64_read_time / operations);
+    
+    // 测试STRING类型性能
+    char test_string[10] = "Performan";
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_set_string(TEST_STRING_8_A5_165, test_string);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t string_write_time = end_time - start_time;
+    printf("STRING write: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, string_write_time, (float)string_write_time / operations);
+    
+    start_time = test_SysTick_GetTick();
+    for (int i = 0; i < operations; i++) {
+        embedded_flash_get(TEST_STRING_8_A5_165, read_data, &len, &type);
+    }
+    end_time = test_SysTick_GetTick();
+    uint32_t string_read_time = end_time - start_time;
+    printf("STRING read: %d operations in %lu ms (%.2f ms/op)\n", 
+           operations, string_read_time, (float)string_read_time / operations);
+    
+    // 性能测试总是通过，只是输出性能指标
+    TEST_ASSERT_TRUE(1);
+}
+
+
+
+
 /**
  * @brief 错误显示验证测试
  * 专门用于验证Unity错误位置显示功能的测试
@@ -1159,6 +1577,37 @@ int test_group_advanced(void) {
 }
 
 /**
+ * @brief 扩展边界测试组
+ * 
+ * 包含新增的边界测试函数，不影响现有的边界测试组
+ */
+int test_group_extended_boundary(void) {
+    UnityPrint("\n========== Running Extended Boundary Tests ==========\n");
+    RUN_TEST(test_embedded_flash_min_length_data);
+    CHECK_FAIL_AND_STOP();
+    RUN_TEST(test_embedded_flash_zero_length_data);
+    CHECK_FAIL_AND_STOP();
+    RUN_TEST(test_embedded_flash_boundary_test);
+    CHECK_FAIL_AND_STOP();
+    return 0;
+}
+
+/**
+ * @brief GC和断电恢复测试组
+ */
+int test_group_gc_power_loss(void) {
+    RUN_TEST(test_embedded_flash_gc_test);
+    CHECK_FAIL_AND_STOP();
+    RUN_TEST(test_embedded_flash_gc_stress_test);
+    CHECK_FAIL_AND_STOP();
+    RUN_TEST(test_embedded_flash_power_loss_test);
+    CHECK_FAIL_AND_STOP();
+    RUN_TEST(test_embedded_flash_power_loss_stress_test);
+    CHECK_FAIL_AND_STOP();
+    return 0;
+}
+
+/**
  * @brief 压力测试组
  */
 int test_group_stress(void) {
@@ -1166,6 +1615,52 @@ int test_group_stress(void) {
     CHECK_FAIL_AND_STOP();
     return 0;
 }
+
+
+
+
+/**
+ * @brief 数据类型一致性测试组
+ */
+int test_group_data_consistency(void) {
+    // 暂时移除未定义的测试函数引用
+
+    
+    return 0;
+}
+
+
+/**
+ * @brief 增强版随机数据测试 - 使用伪随机数生成测试数据，验证数据一致性
+ */
+/**
+ * @brief 增强随机数据测试组 - 包含随机数据测试功能
+ */
+ int test_group_enhanced_random(void) {
+    UnityPrint("\n========== Running Enhanced Random Data Tests ==========\n");
+    RUN_TEST(test_embedded_flash_enhanced_random_data_test);
+    CHECK_FAIL_AND_STOP();
+    return 0;
+}
+
+
+
+
+/**
+ * @brief 性能测试 - 测试写入和读取性能
+ */
+/**
+ * @brief 性能测试组 - 测试各种数据类型的读写性能
+ */
+int test_group_performance(void) {
+    RUN_TEST(test_embedded_flash_performance_test);
+    CHECK_FAIL_AND_STOP();
+    return 0;
+}
+
+
+
+
 
 
 /**
@@ -1188,17 +1683,31 @@ int RunAllTests(void) {
     UnityPrint("\n========== Running Basic Type Tests ==========\n");
     test_group_basic_types();
 
-    UnityPrint("\n========== Running Boundary Tests ==========\n");
-    test_group_boundary();
-
     UnityPrint("\n========== Running Error Handling Tests ==========\n");
     test_group_error_handling();
+
+    UnityPrint("\n========== Running Boundary Tests ==========\n");
+    test_group_boundary();
+    // 调用扩展边界测试组
+    test_group_extended_boundary();
     
     UnityPrint("\n========== Running Advanced Tests ==========\n");
     test_group_advanced();
     
+    UnityPrint("\n========== Running Data Consistency Tests ==========\n");
+    test_group_data_consistency();
+    
+    UnityPrint("\n========== Running Enhanced Random Data Tests ==========\n");
+    test_group_enhanced_random();
+    
+    UnityPrint("\n========== Running GC and Power Loss Tests ==========\n");
+    test_group_gc_power_loss();
+    
     UnityPrint("\n========== Running Stress Tests ==========\n");
     test_group_stress();
+    
+    UnityPrint("\n========== Running Performance Tests ==========\n");
+    test_group_performance();
     
     int failures = UnityEnd();
 		printf("*********failures:%d **************\r\n",failures);

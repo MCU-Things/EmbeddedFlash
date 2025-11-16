@@ -1393,8 +1393,12 @@ EF_ErrCode embedded_flash_set_string(uint8_t key, const char *value) {
         printf("Invalid string value for key=0x%02X\n", key);
         return EF_ERR_PARAM;
     }
+    if(strlen(value) == 0){
+        printf("String is empty for key=0x%02X\n", key);
+        return EF_ERR_SIZE_ZERO;
+    }
     uint8_t length = strlen(value);
-    if (length+1 > KV_MAX_VALUE_SIZE || length == 0) {
+    if (length+1 > KV_MAX_VALUE_SIZE) {
         printf("String too long or empty for key=0x%02X, length=%d\n", key, length);
         return EF_ERR_SIZE_TOO_LONG;
     }

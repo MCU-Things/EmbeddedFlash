@@ -189,23 +189,7 @@
         <Bp>
           <Number>2</Number>
           <Type>0</Type>
-          <LineNumber>757</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>0</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>0</BreakIfRCount>
-          <Filename>.\APP\flash\embedded_flash_manual_tests.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression></Expression>
-        </Bp>
-        <Bp>
-          <Number>3</Number>
-          <Type>0</Type>
-          <LineNumber>1308</LineNumber>
+          <LineNumber>1309</LineNumber>
           <EnabledFlag>1</EnabledFlag>
           <Address>0</Address>
           <ByteObject>0</ByteObject>
@@ -765,18 +749,6 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>.\APP\flash\embedded_flash_demo_tests.c</PathWithFileName>
-      <FilenameWithoutPath>embedded_flash_demo_tests.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>7</GroupNumber>
-      <FileNumber>36</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
       <PathWithFileName>.\APP\flash\EmbeddedFlash.c</PathWithFileName>
       <FilenameWithoutPath>EmbeddedFlash.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
@@ -784,7 +756,7 @@
     </File>
     <File>
       <GroupNumber>7</GroupNumber>
-      <FileNumber>37</FileNumber>
+      <FileNumber>36</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
@@ -796,7 +768,7 @@
     </File>
     <File>
       <GroupNumber>7</GroupNumber>
-      <FileNumber>38</FileNumber>
+      <FileNumber>37</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
@@ -808,7 +780,7 @@
     </File>
     <File>
       <GroupNumber>7</GroupNumber>
-      <FileNumber>39</FileNumber>
+      <FileNumber>38</FileNumber>
       <FileType>1</FileType>
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>

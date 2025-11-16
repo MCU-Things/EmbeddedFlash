@@ -584,11 +584,6 @@
           <GroupName>Flash</GroupName>
           <Files>
             <File>
-              <FileName>embedded_flash_demo_tests.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\APP\flash\embedded_flash_demo_tests.c</FilePath>
-            </File>
-            <File>
               <FileName>EmbeddedFlash.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\APP\flash\EmbeddedFlash.c</FilePath>

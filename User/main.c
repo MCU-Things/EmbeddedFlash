@@ -7,7 +7,6 @@
 #include "SEGGER_RTT.h"
 
 #include "EmbeddedFlash_port.h"
-#include "embedded_flash_demo_tests.h"
 #include "embedded_flash_manual_tests.h"
 /*******************************************************************************
 * �� �� ��         : main
@@ -51,24 +50,8 @@ int main()
 	// 2. EMBEDDED_FLASH_MANUAL_TESTS_ENABLE - 运行Unity手动测试（新增）
 	//    使用方法：在项目配置中定义 EMBEDDED_FLASH_MANUAL_TESTS_ENABLE (1) 来启用Unity测试
 	
-	#if EMBEDDED_FLASH_DEMO_ENABLE_TESTS
-		// 运行原有的demo_tests测试
-		InitSysTick();
-		if (flash_port_erase(KV_SECTOR_START_ADDR, KV_SECTOR_SIZE*KV_SECTOR_COUNT) != EF_OK) {
-			printf ("erase fail \n");
-		}
-		uint32_t test_count = 0;
-		while(test_count<10){
-			test_count++;
-			printf("\r\n\r\n********      start             ************\r\n");
-			embedded_flash_demo_run_full();
-			printf("********      end               ************\r\n\r\n");
-			printf("test_count:%d",	test_count);
-			delay_ms(5000);
-			embedded_flash_print_erase_stats();
-			delay_ms(5000);
-		}
-	#elif (EMBEDDED_FLASH_MANUAL_TESTS_ENABLE == 1)
+	// 不再支持EMBEDDED_FLASH_DEMO_ENABLE_TESTS，已替换为手动测试框架
+	#if (EMBEDDED_FLASH_MANUAL_TESTS_ENABLE == 1)
 		// 运行Unity手动测试用例
 		test_sysTick_init();
 		printf("\r\n\r\n");
@@ -98,7 +81,7 @@ int main()
 	#endif
 	
 	// 只有在非测试模式下才运行正常应用代码
-	#if (!EMBEDDED_FLASH_DEMO_ENABLE_TESTS) && (EMBEDDED_FLASH_MANUAL_TESTS_ENABLE != 1)
+	#if (EMBEDDED_FLASH_MANUAL_TESTS_ENABLE != 1)
 	//??????
 	powerOffofFlashSaveData_ToSysData();
 	
