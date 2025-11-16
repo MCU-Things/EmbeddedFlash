@@ -104,11 +104,11 @@ static EF_ErrCode _sector_magic_write(uint8_t sector_idx)
     // 写入魔术字
 	  uint32_t data = SECTOR_HEADER_MAGIC_WORD;
     if (flash_port_write(magic_addr, (uint8_t*)&data, sizeof(uint32_t)) != EF_OK) {
-        EFLASH_LOGE("Failed to write sector magic word at addr=0x%08X\n", magic_addr);
+        EFLASH_LOGE("Magic write fail @0x%08X\n", magic_addr);
         return EF_ERR_WRITE;
     }
     
-    EFLASH_LOGI("Sector %d magic word written successfully at 0x%08X\n", sector_idx, magic_addr);
+    EFLASH_LOGI("Magic OK S%d @0x%08X\n", sector_idx, magic_addr);
     return EF_OK;
 }
 /**
@@ -124,7 +124,7 @@ static int _sector_header_read(uint8_t sector_idx, sector_header_t *header) {
         /* 读取扇区头 */
         if (flash_port_read(addr, (uint8_t*)header, sizeof(sector_header_t)) == EF_OK) {
             if (!_is_sector_header(header)) {
-                EFLASH_LOGE("Invalid sector header at 0x%08X\n", addr);
+                EFLASH_LOGE("Bad header @0x%08X\n", addr);
                 return -1;
             }
             
@@ -146,7 +146,7 @@ static embedded_flash_att_status_t embedded_flash_get_attr_status(void)
 	uint8_t empty_cnt = 0;
     sector_header_t header={0};
     
-    EFLASH_LOGI("Checking system status...\n");
+    EFLASH_LOGD("Scan status\n");
 	for (int i = 0; i < KV_SECTOR_COUNT; i++) {
 		if (_sector_header_read(i, &header) != 0) {
 			empty_cnt++;
@@ -163,54 +163,46 @@ static embedded_flash_att_status_t embedded_flash_get_attr_status(void)
         }
 	}
 	
-	EFLASH_LOGI("Status summary: gc=%d, gc_temp=%d, data=%d, data_gcing=%d, empty=%d\n", 
+	EFLASH_LOGD("Sum gc=%d tmp=%d data=%d gcing=%d emp=%d\n", 
 	       gc_cnt, gc_temp_cnt, data_cnt, data_gcing_cnt, empty_cnt);
 	
     uint8_t status = EFLASH_STATUS_UNKNOWN_ERROR;
 	if (gc_temp_cnt > 1 || gc_cnt > 1 || data_gcing_cnt > 1) {
 		status = EFLASH_STATUS_MULTI_ROLE_ERROR; // GC_TEMP>1 或 GC>1 或 DATA_GCING>1
-		EFLASH_LOGI("Status: MULTI_ROLE_ERROR\n");
 	}
     
     else if (gc_cnt == 0 && gc_temp_cnt == 0 && data_cnt == 0 && data_gcing_cnt == 0 && empty_cnt == KV_SECTOR_COUNT) {
 		status = EFLASH_STATUS_FIRST_POWER_ON; // 首次上电：全空白
-		EFLASH_LOGI("Status: FIRST_POWER_ON\n");
 	}
 
 	else if (gc_cnt == 1 && gc_temp_cnt == 0 && data_cnt >= 1 && data_gcing_cnt == 0 && empty_cnt == 0) {
 		status =  EFLASH_STATUS_NORMAL; // 正常：1 GC，无 GC_TEMP，有 DATA，无 DATA_GCING，无空白
-		EFLASH_LOGI("Status: NORMAL\n");
 	}
 
 	else if (gc_cnt == 0 && gc_temp_cnt == 1 && data_cnt >= 1 && data_gcing_cnt == 0 && empty_cnt == 0) {
 		status =  EFLASH_STATUS_GC_PREPARE; // 异常1：无 GC，有 GC_TEMP，有 DATA，无 DATA_GCING
-		EFLASH_LOGI("Status: GC_PREPARE\n");
 	}
 
 	else if (gc_cnt == 0 && gc_temp_cnt == 1 && data_cnt >= 1 && data_gcing_cnt == 1 && empty_cnt == 0) {
 		status =  EFLASH_STATUS_GC_MIGRATING; // 异常2：无 GC，有 GC_TEMP，有 DATA，有 DATA_GCING
-		EFLASH_LOGI("Status: GC_MIGRATING\n");
 	}
 
 	else if (gc_cnt == 0 && gc_temp_cnt == 0 && data_cnt >= 1 && data_gcing_cnt == 1 && empty_cnt == 0) {
 		status =  EFLASH_STATUS_GC_AFTER_MIGRATE; // 异常3：无 GC，无 GC_TEMP，有 DATA，有 DATA_GCING
-		EFLASH_LOGI("Status: GC_AFTER_MIGRATE\n");
 	}
 
 	else if (gc_cnt == 0 && gc_temp_cnt == 0 && data_cnt >= 1 && data_gcing_cnt == 0 && empty_cnt >= 1) {
 		status =  EFLASH_STATUS_GC_AFTER_MIGRATE_WITH_EMPTY; // 异常4：无 GC，无 GC_TEMP，有 DATA，无 DATA_GCING，有空白
-		EFLASH_LOGI("Status: GC_AFTER_MIGRATE_WITH_EMPTY\n");
 	}
 
 	else if (empty_cnt > 0 && (data_cnt > 0 || data_gcing_cnt > 0 || gc_cnt > 0 || gc_temp_cnt > 0)) {
 		status =  EFLASH_STATUS_EMPTY_SECTOR_ERROR; // 存在空白但不符合上面场景
-		EFLASH_LOGI("Status: EMPTY_SECTOR_ERROR\n");
 	}
 
 	else {
-		EFLASH_LOGI("Status: UNKNOWN_ERROR\n");
+		
 	}
-
+    EFLASH_LOGI("STAT:%\n",status);
 	return status; // 兜底
 }
 
@@ -243,19 +235,19 @@ void embedded_flash_reset_erase_stats(void) {
  * @brief 打印擦除统计信息
  */
 void embedded_flash_print_erase_stats(void) {
-    EFLASH_LOGI("\n========== Flash Erase Statistics ==========\n");
-    EFLASH_LOGI("Total erase operations: %lu\n", (unsigned long)m_erase_stats.total_erase_count);
-    EFLASH_LOGI("Max erase count:        %lu (Sector %d at 0x%08X)\n", 
+    EFLASH_LOGI("ERASE STATS\n");
+    EFLASH_LOGI("Total: %lu\n", (unsigned long)m_erase_stats.total_erase_count);
+    EFLASH_LOGI("Max:   %lu (S%d @0x%08X)\n", 
            (unsigned long)m_erase_stats.max_erase_count,
            m_erase_stats.max_erase_sector_idx,
            m_sector_desc_list[m_erase_stats.max_erase_sector_idx].sector_addr);
     
-    EFLASH_LOGI("\nPer-sector erase counts:\n");
+    EFLASH_LOGI("Per-sector:\n");
     for (int i = 0; i < KV_SECTOR_COUNT; i++) {
         uint32_t erase_count = m_erase_stats.sector_erase_count[i];
         float wear_percent = (float)erase_count * 100.0f / CHIP_FLASH_ERASE_MAXTIMES;
         
-        EFLASH_LOGI("  Sector %d (0x%08X): %5lu erases (%.2f%% wear)", 
+        EFLASH_LOGI("  S%d(0x%08X): %lu (%.2f%%)", 
                i,
                m_sector_desc_list[i].sector_addr,
                (unsigned long)erase_count,
@@ -276,7 +268,7 @@ void embedded_flash_print_erase_stats(void) {
         
         // 显示最大磨损扇区标记
         if (i == m_erase_stats.max_erase_sector_idx && m_erase_stats.max_erase_count > 0) {
-            EFLASH_LOGI(" <-- Max wear");
+            EFLASH_LOGI(" <MAX>");
         }
         
         EFLASH_LOGI("\n");
@@ -284,38 +276,37 @@ void embedded_flash_print_erase_stats(void) {
     
     // 计算平均擦除次数
     float avg_erase = (float)m_erase_stats.total_erase_count / KV_SECTOR_COUNT;
-    EFLASH_LOGI("\nAverage erase count:    %.1f\n", avg_erase);
+    EFLASH_LOGI("Avg:   %.1f\n", avg_erase);
     
     // 计算磨损均衡度（最大值与平均值的比率）
     if (avg_erase > 0) {
         float wear_balance = (float)m_erase_stats.max_erase_count / avg_erase;
-        EFLASH_LOGI("Wear balance ratio:     %.2f ", wear_balance);
+        EFLASH_LOGI("Balance: %.2f ", wear_balance);
         if (wear_balance < 1.5f) {
-            EFLASH_LOGI("(Excellent)\n");
+            EFLASH_LOGI("(Ex)\n");
         } else if (wear_balance < 2.0f) {
-            EFLASH_LOGI("(Good)\n");
+            EFLASH_LOGI("(G)\n");
         } else if (wear_balance < 3.0f) {
-            EFLASH_LOGI("(Fair)\n");
+            EFLASH_LOGI("(F)\n");
         } else {
-            EFLASH_LOGI("(Poor - Consider improving wear leveling)\n");
+            EFLASH_LOGI("(P)\n");
         }
     }
     
     // 估算剩余寿命
     if (m_erase_stats.max_erase_count > 0) {
         uint32_t remaining = CHIP_FLASH_ERASE_MAXTIMES - m_erase_stats.max_erase_count;
-        EFLASH_LOGI("Estimated remaining:    %lu erases on most worn sector\n", (unsigned long)remaining);
+        EFLASH_LOGI("Remain: %lu (max worn)\n", (unsigned long)remaining);
         
         if (m_erase_stats.max_erase_count >= CHIP_FLASH_ERASE_MAXTIMES) {
-            EFLASH_LOGW("\n[WARNING] Flash has exceeded rated endurance!\n");
+            EFLASH_LOGW("Warn: exceed endurance!\n");
         } else if (m_erase_stats.max_erase_count >= CHIP_FLASH_ERASE_MAXTIMES * 0.9f) {
-            EFLASH_LOGW("\n[WARNING] Flash is approaching end of life!\n");
+            EFLASH_LOGW("Warn: near EoL!\n");
         }
     }
     
-    EFLASH_LOGI("============================================\n\n");
+    EFLASH_LOGI("END STATS\n");
 }
-
 #endif
 
 
@@ -583,7 +574,7 @@ static uint32_t _write_kv_record_to_sector(uint8_t sector_idx, KV_Record *p)
     
     // 只有状态改变时才写入扇区头（状态/角色）
     if (m_sector_desc_list[sector_idx].attr.status != original_status) {
-        EFLASH_LOGD("original_sector_status:%d, new_sector_status:%d\n", original_status, m_sector_desc_list[sector_idx].attr.status);
+        EFLASH_LOGD("S%d status %d->%d\n", sector_idx, original_status, m_sector_desc_list[sector_idx].attr.status);
         if (_write_sector_status(m_sector_desc_list[sector_idx].sector_addr, (EmbeddedFlash_sector_status_e)m_sector_desc_list[sector_idx].attr.status) != EF_OK) {
 			EFLASH_LOGE("Failed to write sector status to sector %d, addr=0x%08X\n", sector_idx, m_sector_desc_list[sector_idx].sector_addr);
             return 0;
@@ -635,9 +626,9 @@ static int _find_writable_data_sector(uint16_t required_space)
         }
         EFLASH_LOGW("No writable data sector found with required_space=%d\n", required_space);
     } else {
-        EFLASH_LOGW("Failed to find GC sector - all sectors:\n");
+        EFLASH_LOGW("No GC sector, dump all:\n");
         for (int i = 0; i < KV_SECTOR_COUNT; i++) {
-            EFLASH_LOGD("  Sector %d: addr=0x%08X, status=%d, role=%d\n", 
+            EFLASH_LOGD("  S%d: @0x%08X st=%d role=%d\n", 
                    i, m_sector_desc_list[i].sector_addr,
                    m_sector_desc_list[i].attr.status, 
                    m_sector_desc_list[i].attr.role);
@@ -670,7 +661,7 @@ restart_write:
  */
 static EF_ErrCode _erase_sector(uint8_t sector_idx) {
 
-    EFLASH_LOGI("Erasing sector %d at address 0x%08X, size=%d\n", 
+    EFLASH_LOGI("Erase S%d @0x%08X sz=%d\n", 
             sector_idx, m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE);
     if (flash_port_erase(m_sector_desc_list[sector_idx].sector_addr, KV_SECTOR_SIZE) == EF_OK) {
             // 重置扇区信息
@@ -700,7 +691,7 @@ static EF_ErrCode _erase_sector(uint8_t sector_idx) {
 /* 初始化扇区头 */
 static EF_ErrCode _init_all_sector_attr(void)
 {
-    EFLASH_LOGI("Initializing all sector attributes...\n");
+    EFLASH_LOGI("Init sector attrs\n");
 	for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
         //擦除扇区
         EF_ErrCode ret = _erase_sector(i);
@@ -727,7 +718,7 @@ static EF_ErrCode _init_all_sector_attr(void)
 /* 初始化KV记录 */
 static EF_ErrCode _init_all_kv_record(void)
 {
-    EFLASH_LOGI("Initializing all KV records...\n");
+    EFLASH_LOGI("Init KV defaults\n");
     for (int i = 0; i < m_kv_data_list_count; i++) {
         if (mp_kv_list[i].data_source == KV_DATA_SOURCE_DEFAULT) {
             // 构造默认值记录
@@ -742,7 +733,7 @@ static EF_ErrCode _init_all_kv_record(void)
             
             // 检查边界，防止数组越界
             if (mp_kv_list[i].value_length > KV_MAX_VALUE_SIZE) {
-                EFLASH_LOGE("CRITICAL: default value_length=%d exceeds KV_MAX_VALUE_SIZE=%d for key=0x%02X\n", 
+                EFLASH_LOGE("Default too long len=%d > %d key=0x%02X\n", 
                        mp_kv_list[i].value_length, KV_MAX_VALUE_SIZE, mp_kv_list[i].key);
                 return EF_ERR_PARAM;
             }
@@ -755,13 +746,13 @@ static EF_ErrCode _init_all_kv_record(void)
             // 写入记录（使用状态表机制）
             uint32_t write_addr_abs = _write_kv_record(&record);
             if(write_addr_abs == 0 ){
-				EFLASH_LOGE("Failed to write default value for key=0x%02X\n", mp_kv_list[i].key);
+				EFLASH_LOGE("Default write fail key=0x%02X\n", mp_kv_list[i].key);
                 return EF_ERR_WRITE;
             }
             
             // 使用类型安全函数标记为WRITE状态
             if(_write_kv_status(write_addr_abs, EFLASH_KV_WRITE) != EF_OK){
-                EFLASH_LOGE("Failed to set WRITE status for key=0x%02X at addr=0x%08X\n", mp_kv_list[i].key, write_addr_abs);
+                EFLASH_LOGE("WRITE set fail key=0x%02X @0x%08X\n", mp_kv_list[i].key, write_addr_abs);
                 EFLASH_ASSERT(0);
                 return EF_ERR_WRITE;
             }
@@ -770,7 +761,7 @@ static EF_ErrCode _init_all_kv_record(void)
             mp_kv_list[i].data_source = KV_DATA_SOURCE_FIRST_WRITE;
             
             //打印初始化数据
-            EFLASH_LOGI("Initialized data for key=0x%02X, addr=0x%08X\n", record.key, write_addr_abs);
+            EFLASH_LOGI("Default OK key=0x%02X @0x%08X\n", record.key, write_addr_abs);
 						uint8_t *p = (uint8_t*)&record;
             EFLASH_PRINT_HEX("record", p, sizeof(record));
 
@@ -787,17 +778,17 @@ static EF_ErrCode _init_all_kv_record(void)
 static EmbeddedFlash_record_status_e _is_kv_record(const KV_Record *record) {
     // 空指针检查
     if (record == NULL) {
-        EFLASH_LOGE("_is_kv_record: NULL record pointer\n");
+    EFLASH_LOGE("KV chk: null ptr\n");
         return EFLASH_KV_UNUSED;
     }
     
     if (record->magic != KV_HEADER_MAGIC) {
-        EFLASH_LOGW("_is_kv_record: Invalid magic=0x%02X, expected=0x%02X\n", record->magic, KV_HEADER_MAGIC);
+        EFLASH_LOGW("KV chk: bad magic=0x%02X exp=0x%02X\n", record->magic, KV_HEADER_MAGIC);
         return EFLASH_KV_UNUSED;
     }
 
     if (record->value_length == 0 || record->value_length > KV_MAX_VALUE_SIZE) {
-        EFLASH_LOGW("_is_kv_record: Invalid value_length=%d, key=0x%02X\n", record->value_length, record->key);
+        EFLASH_LOGW("KV chk: bad len=%d key=0x%02X\n", record->value_length, record->key);
         return EFLASH_KV_UNUSED;
     }
 
@@ -806,7 +797,7 @@ static EmbeddedFlash_record_status_e _is_kv_record(const KV_Record *record) {
     uint16_t calc_crc = crc16_x25_calculate((uint8_t*)&record->key, 2 + KV_MAX_VALUE_SIZE);
     if (calc_crc != record->crc) {
         //crc不匹配，记录无效
-        EFLASH_LOGW("_is_kv_record: CRC mismatch for key=0x%02X, calc_crc=0x%04X, stored_crc=0x%04X\n", record->key, calc_crc, record->crc);
+        EFLASH_LOGW("KV chk: CRC key=0x%02X calc=0x%04X got=0x%04X\n", record->key, calc_crc, record->crc);
         return EFLASH_KV_UNUSED;
     }
     uint8_t record_status = (uint8_t)_get_kv_status_from_table((uint8_t*)record->status_table);
@@ -837,11 +828,11 @@ static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_
         //读取扇区头
         sector_header_t header = {0};
         if(flash_port_read(m_sector_desc_list[sector_idx].sector_addr, (uint8_t*)&header, sizeof(sector_header_t)) != EF_OK){
-            EFLASH_LOGE("Failed to read sector header at addr=0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
+            EFLASH_LOGE("Hdr read fail @0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
             return EF_ERR_READ;
         }
         if(_is_sector_header(&header) == false){
-            EFLASH_LOGE("Invalid sector header at addr=0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
+            EFLASH_LOGE("Bad header @0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
             return EF_ERR_INVALID;
         }
         uint8_t sector_status = (uint8_t)_get_sector_status_from_table(header.status_table);
@@ -862,7 +853,7 @@ static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_
                     }
                     record_count++;
                 } else {
-                    EFLASH_LOGD("Invalid record at addr=0x%08X\n", scan_addr);
+                    EFLASH_LOGD("Bad rec @0x%08X\n", scan_addr);
                     EFLASH_PRINT_HEX("record", (uint8_t*)&record, sizeof(KV_Record));
                     // 检查是否是全0xFF区域（空白区域）
                     uint8_t all_0xff = 1;
@@ -883,7 +874,7 @@ static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_
                     }*///不清0
                 }
             }else{
-                EFLASH_LOGE("Failed to read record at addr=0x%08X\n", scan_addr);
+                EFLASH_LOGE("Rec read fail @0x%08X\n", scan_addr);
             }
             //成功失败都继续推进，避免死循环
             scan_addr += sizeof(KV_Record);
@@ -940,7 +931,7 @@ static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr)
         //查找对应的kv_data_t
         kv_data_t *p_kv_data = _find_kv_data(record->key);
         if(p_kv_data == NULL){
-            EFLASH_LOGE("No kv_data_t found for key=0x%02X, addr=0x%08X\n", record->key, abs_addr);
+            EFLASH_LOGE("No kv key=0x%02X @0x%08X\n", record->key, abs_addr);
             return EF_ERR_INVALID;
         }
         
@@ -948,26 +939,26 @@ static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr)
         p_kv_data->data_type = record->data_type;
         p_kv_data->value_length = record->value_length;
         if(record->value_length > KV_MAX_VALUE_SIZE){
-            EFLASH_LOGE("Value length %d for key=0x%02X exceeds max size %d, addr=0x%08X\n", 
+            EFLASH_LOGE("Len %d > %d key=0x%02X @0x%08X\n", 
                 record->value_length, record->key, KV_MAX_VALUE_SIZE, abs_addr);
             return EF_ERR_SIZE_TOO_LONG;
         }
         memcpy(p_kv_data->value, record->value, record->value_length);
         p_kv_data->data_source = KV_DATA_SOURCE_FLASH_READ;
         //加载的数据和地址
-        EFLASH_LOGI("Loaded data for key=0x%02X, addr=0x%08X, type=%d, length=%d\n", record->key, abs_addr, record->data_type, record->value_length);
+        EFLASH_LOGI("Load key=0x%02X @0x%08X type=%d len=%d\n", record->key, abs_addr, record->data_type, record->value_length);
         EFLASH_PRINT_HEX("value", record->value, record->value_length);
         return EF_OK;
     }else{
         //无效记录
-        EFLASH_LOGD("Invalid record status for key=0x%02X, status=%d, addr=0x%08X\n", record->key, record_status, abs_addr);
+        EFLASH_LOGD("Bad rec st=%d key=0x%02X @0x%08X\n", record_status, record->key, abs_addr);
         return EF_ERR_INVALID;
     }
 }
 /* 加载kv记录*/
 static EF_ErrCode _load_kv_record(void)
 {
-    EFLASH_LOGI("Loading all KV records...\n");
+    EFLASH_LOGI("Load KV\n");
     return _iteration(_load_kv_record_callback);
 }
 
@@ -985,11 +976,11 @@ static EF_ErrCode _load_kv_record(void)
 static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target_sector_idx)
 {
     if (source_sector_idx >= KV_SECTOR_COUNT || target_sector_idx >= KV_SECTOR_COUNT) {
-        EFLASH_LOGE("Invalid sector index: source=%d, target=%d\n", source_sector_idx, target_sector_idx);
+        EFLASH_LOGE("Bad idx src=%d dst=%d\n", source_sector_idx, target_sector_idx);
         return EF_ERR_PARAM;
     }
     
-    EFLASH_LOGI("Migrating data from source sector %d to target sector %d\n", source_sector_idx, target_sector_idx);
+    EFLASH_LOGI("MIG %d->%d\n", source_sector_idx, target_sector_idx);
     
     // 计算源扇区的扫描地址范围
     uint32_t source_sector_start_addr = m_sector_desc_list[source_sector_idx].sector_addr + sizeof(sector_header_t);
@@ -997,7 +988,7 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
     
     // 检查目标扇区是否有足够空间（至少需要能写入一个记录的空间）
     if (m_sector_desc_list[target_sector_idx].free_space < sizeof(KV_Record)) {
-        EFLASH_LOGW("Target sector %d has insufficient space: %d bytes\n", 
+        EFLASH_LOGW("No space tgt=%d %dB\n", 
                target_sector_idx, m_sector_desc_list[target_sector_idx].free_space);
         return EF_ERR_NO_SPACE;
     }
@@ -1011,7 +1002,7 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
         
         // 读取记录
         if (flash_port_read(source_sector_start_addr, (uint8_t*)&record, sizeof(KV_Record)) != EF_OK) {
-            EFLASH_LOGE("Failed to read record at address 0x%08X\n", source_sector_start_addr);
+            EFLASH_LOGE("Read fail @0x%08X\n", source_sector_start_addr);
             source_sector_start_addr += sizeof(KV_Record);
             continue;
         }
@@ -1039,12 +1030,12 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
         
         // 只处理PRE_WRITE和WRITE状态的记录
         if (/*record_status == EFLASH_KV_PRE_WRITE || */record_status == EFLASH_KV_WRITE) {
-            EFLASH_LOGD("Found record to migrate: key=0x%02X, status=%d, addr=0x%08X\n", 
+            EFLASH_LOGD("MIG rec key=0x%02X st=%d @0x%08X\n", 
                    record.key, record_status, source_sector_start_addr);
             
             // 检查目标扇区是否有足够空间
             if (m_sector_desc_list[target_sector_idx].free_space < sizeof(KV_Record)) {
-                EFLASH_LOGW("Target sector %d is full, cannot migrate more records\n", target_sector_idx);
+                EFLASH_LOGW("Tgt full %d\n", target_sector_idx);
                 return EF_ERR_NO_SPACE;
             }
             
@@ -1057,27 +1048,27 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
             // 写入到目标扇区
             uint32_t new_record_addr = _write_kv_record_to_sector(target_sector_idx, &new_record);
             if (new_record_addr == 0) {
-                EFLASH_LOGE("Failed to write record to target sector %d\n", target_sector_idx);
+                EFLASH_LOGE("Write fail tgt=%d\n", target_sector_idx);
                 return EF_ERR_WRITE;
             }
             
             // 将源扇区中的原记录标记为预删除
             if (_kv_delete_record(source_sector_start_addr, EFLASH_KV_PRE_DELETE) != EF_OK) {
-                EFLASH_LOGE("Failed to delete original record at 0x%08X\n", source_sector_start_addr);
+                EFLASH_LOGE("PreDel fail @0x%08X\n", source_sector_start_addr);
                 EFLASH_ASSERT(0);
                 return EF_ERR_WRITE;
             }
 
             // 将新记录标记为WRITE状态
             if (_write_kv_status(new_record_addr, EFLASH_KV_WRITE) != EF_OK) {
-                EFLASH_LOGE("Failed to set WRITE status for migrated record at 0x%08X\n", new_record_addr);
+                EFLASH_LOGE("WRITE set fail @0x%08X\n", new_record_addr);
                 EFLASH_ASSERT(0);
                 return EF_ERR_WRITE;
             }
             
             // 将源扇区中的原记录标记为已删除
             if (_kv_delete_record(source_sector_start_addr, EFLASH_KV_DELETED) != EF_OK) {
-                EFLASH_LOGE("Failed to delete original record at 0x%08X\n", source_sector_start_addr);
+                EFLASH_LOGE("DEL fail @0x%08X\n", source_sector_start_addr);
                 EFLASH_ASSERT(0);
                 return EF_ERR_WRITE;
             }
@@ -1087,23 +1078,23 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
             if(p_kv_data != NULL){
                 p_kv_data->addr_abs = new_record_addr;
                 p_kv_data->data_source = KV_DATA_SOURCE_FLASH_READ;
-                EFLASH_LOGD("Updated kv_data_t address for key=0x%02X to 0x%08X\n", record.key, new_record_addr);
+                EFLASH_LOGD("KV addr key=0x%02X -> 0x%08X\n", record.key, new_record_addr);
             }else{
-                EFLASH_LOGE("No kv_data_t found for key=0x%02X\n", record.key);
+                EFLASH_LOGE("No kv key=0x%02X\n", record.key);
                 EFLASH_ASSERT(0);
             }
 
-            EFLASH_LOGI("Record migrated: key=0x%02X, from 0x%08X to 0x%08X\n", 
+            EFLASH_LOGI("MIG key=0x%02X 0x%08X->0x%08X\n", 
                    record.key, source_sector_start_addr, new_record_addr);
             migrated_count++;
             deleted_count++;
-            EFLASH_LOGD("Original record at 0x%08X marked as DELETED\n", source_sector_start_addr);
+            EFLASH_LOGD("Old @0x%08X DEL\n", source_sector_start_addr);
         }
         
         // 继续扫描下一个记录
         source_sector_start_addr += sizeof(KV_Record);
     }
-    EFLASH_LOGI("Migration completed: %d records migrated, %d records deleted\n", 
+    EFLASH_LOGI("MIG done: mig=%d del=%d\n", 
            migrated_count, deleted_count);
     
     return EF_OK;
@@ -1169,10 +1160,10 @@ static int _find_sector_role(uint8_t role)
 /* GC操作 */
 EF_ErrCode embedded_flash_gc(void)
 {
-    EFLASH_LOGI("GC operation started\n");
+    EFLASH_LOGI("GC start\n");
     embedded_flash_att_status_t status = embedded_flash_get_attr_status();
     if(status != EFLASH_STATUS_NORMAL){
-        EFLASH_LOGE("GC operation not allowed in status %d\n", status);
+        EFLASH_LOGE("GC deny st=%d\n", status);
         EFLASH_ASSERT(0);
         return EF_ERR_NOT_INIT;
     }
@@ -1181,7 +1172,7 @@ EF_ErrCode embedded_flash_gc(void)
     //1、查找gc区位置和第一个数据区位置
     int gc_sector_idx = _find_sector_role(EFLASH_SECTOR_ROLE_GC);
     if(gc_sector_idx < 0){
-        EFLASH_LOGE("GC sector not found\n");
+        EFLASH_LOGE("GC not found\n");
         return EF_ERR_NOT_FOUND;
     }
     int data_sector_idx = (gc_sector_idx + 1) % KV_SECTOR_COUNT;
@@ -1193,38 +1184,38 @@ EF_ErrCode embedded_flash_gc(void)
     m_sector_desc_list[gc_sector_idx].attr.role = EFLASH_SECTOR_ROLE_GC_TEMP;
     
     if(_write_sector_role(m_sector_desc_list[data_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_DATA_GCING) != EF_OK){
-        EFLASH_LOGE("Failed to set DATA_GCING role for sector %d\n", data_sector_idx);
+        EFLASH_LOGE("Role set fail DATA_GCING S%d\n", data_sector_idx);
         return EF_ERR;
     }
     m_sector_desc_list[data_sector_idx].attr.role = EFLASH_SECTOR_ROLE_DATA_GCING;
     
     //3、将第一个数据区的数据搬运到gc区
     if(_migrate_sector_data(data_sector_idx, gc_sector_idx) != EF_OK){
-        EFLASH_LOGE("Failed to migrate data from sector %d to sector %d\n", data_sector_idx, gc_sector_idx);
+        EFLASH_LOGE("MIG fail %d->%d\n", data_sector_idx, gc_sector_idx);
         return EF_ERR;
     }
     //4、擦除第一个数据区
     if(_erase_sector(data_sector_idx) != EF_OK){
-        EFLASH_LOGE("Failed to erase sector %d\n", data_sector_idx);
+        EFLASH_LOGE("Erase fail S%d\n", data_sector_idx);
         return EF_ERR;
     }
     //5、写入新的头信息
 
     //第一个数据区 -> gc区
     if(_write_sector_status(m_sector_desc_list[data_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_FREE) != EF_OK){
-        EFLASH_LOGE("Failed to set FREE status for sector %d\n", data_sector_idx);
+        EFLASH_LOGE("Status FREE fail S%d\n", data_sector_idx);
         return EF_ERR;
     }
     m_sector_desc_list[data_sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
 
     if(_write_sector_role(m_sector_desc_list[data_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_GC) != EF_OK){
-        EFLASH_LOGE("Failed to set GC role for sector %d\n", data_sector_idx);
+        EFLASH_LOGE("Role GC fail S%d\n", data_sector_idx);
         return EF_ERR;
     }
     m_sector_desc_list[data_sector_idx].attr.role = EFLASH_SECTOR_ROLE_GC;
 
     if(_sector_magic_write(data_sector_idx) != EF_OK){
-        EFLASH_LOGE("Failed to write magic for sector %d\n", data_sector_idx);
+        EFLASH_LOGE("Magic fail S%d\n", data_sector_idx);
         return EF_ERR;
     }
 
@@ -1237,7 +1228,7 @@ EF_ErrCode embedded_flash_gc(void)
     // m_sector_desc_list[gc_sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
     
     if(_write_sector_role(m_sector_desc_list[gc_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_DATA) != EF_OK){
-        EFLASH_LOGE("Failed to set DATA role for sector %d\n", gc_sector_idx);
+        EFLASH_LOGE("Role DATA fail S%d\n", gc_sector_idx);
         return EF_ERR;
     }
     m_sector_desc_list[gc_sector_idx].attr.role = EFLASH_SECTOR_ROLE_DATA;
@@ -1249,25 +1240,20 @@ EF_ErrCode embedded_flash_gc(void)
 
 
 EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count) {
-    EFLASH_LOGI("Starting initialization...\n");
-    EFLASH_LOGD("KV_SECTOR_START_ADDR=0x%08X\n", KV_SECTOR_START_ADDR);
-    EFLASH_LOGD("KV_SECTOR_SIZE=%d\n", KV_SECTOR_SIZE);
-    EFLASH_LOGD("KV_SECTOR_COUNT=%d\n", KV_SECTOR_COUNT);
+    EFLASH_LOGI("Init start\n");
+    EFLASH_LOGD("KV_BASE=0x%08X\n", KV_SECTOR_START_ADDR);
+    EFLASH_LOGD("KV_SIZE=%d\n", KV_SECTOR_SIZE);
+    EFLASH_LOGD("KV_CNT=%d\n", KV_SECTOR_COUNT);
     
     // 调试：打印扇区头和KV记录结构体大小
-    EFLASH_LOGD("sizeof(sector_header_t)=%d bytes\n", (int)sizeof(sector_header_t));
-    EFLASH_LOGD("SECTOR_STATUS_TABLE_SIZE=%d bytes\n", SECTOR_STATUS_TABLE_SIZE);
-    EFLASH_LOGD("SECTOR_ROLE_TABLE_SIZE=%d bytes\n", SECTOR_ROLE_TABLE_SIZE);
-    EFLASH_LOGD("sizeof(KV_Record)=%d bytes\n", (int)sizeof(KV_Record));
-    EFLASH_LOGD("KV_STATUS_TABLE_SIZE=%d bytes\n", KV_STATUS_TABLE_SIZE);
-    EFLASH_LOGD("KV_MAGIC_OFFSET=%d bytes\n", KV_MAGIC_OFFSET);
-    EFLASH_LOGD("EFLASH_WRITE_GRAN=%d bits\n", EFLASH_WRITE_GRAN);
+    EFLASH_LOGD("hdr=%dB st=%dB role=%dB kv=%dB kvst=%dB kvoff=%d gran=%db\n", 
+        (int)sizeof(sector_header_t), SECTOR_STATUS_TABLE_SIZE, SECTOR_ROLE_TABLE_SIZE, 
+        (int)sizeof(KV_Record), KV_STATUS_TABLE_SIZE, KV_MAGIC_OFFSET, EFLASH_WRITE_GRAN);
     for (int i = 0; i < KV_SECTOR_COUNT; i++) {
-        EFLASH_LOGD("Sector[%d] addr=0x%08X, status=%d, role=%d\n", 
+        EFLASH_LOGD("S[%d] @0x%08X st=%d role=%d\n", 
                i, m_sector_desc_list[i].sector_addr, 
                m_sector_desc_list[i].attr.status, m_sector_desc_list[i].attr.role);
-               EFLASH_LOGD("Sector[%d] free_space=%d\n", i, m_sector_desc_list[i].free_space);
-               EFLASH_LOGD("Sector[%d] record_count=%d\n", i, m_sector_desc_list[i].record_count);
+               EFLASH_LOGD("S[%d] free=%d cnt=%d\n", i, m_sector_desc_list[i].free_space, m_sector_desc_list[i].record_count);
     }
 
     if (defaults == NULL || default_count == 0 || default_count > 255) {
@@ -1284,11 +1270,11 @@ EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count)
             for (int i = 0; i < KV_SECTOR_COUNT; i++) {
                 sector_header_t header;
                 if (_sector_header_read(i, &header) == 0) {
-                    EFLASH_LOGD("Sector %d: status=%d, role=%d\n", i, 
+                    EFLASH_LOGD("S%d: st=%d role=%d\n", i, 
                            m_sector_desc_list[i].attr.status, 
                            m_sector_desc_list[i].attr.role);
                 } else {
-                    EFLASH_LOGW("Failed to read header for sector %d\n", i);
+                    EFLASH_LOGW("Hdr read fail S%d\n", i);
                 }
             }
             ret = _load_kv_record();
@@ -1390,16 +1376,16 @@ EF_ErrCode embedded_flash_set_float(uint8_t key, float value) {
 
 EF_ErrCode embedded_flash_set_string(uint8_t key, const char *value) {
     if (value == NULL) {
-        EFLASH_LOGE("Invalid string value for key=0x%02X\n", key);
+        EFLASH_LOGE("str NULL key=0x%02X\n", key);
         return EF_ERR_PARAM;
     }
     if(strlen(value) == 0){
-        EFLASH_LOGE("String is empty for key=0x%02X\n", key);
+        EFLASH_LOGE("str empty key=0x%02X\n", key);
         return EF_ERR_SIZE_ZERO;
     }
     uint8_t length = strlen(value);
     if (length+1 > KV_MAX_VALUE_SIZE) {
-        EFLASH_LOGE("String too long or empty for key=0x%02X, length=%d\n", key, length);
+        EFLASH_LOGE("str too long key=0x%02X len=%d\n", key, length);
         return EF_ERR_SIZE_TOO_LONG;
     }
     // 存储字符串时包含结束符，所以长度+1
@@ -1408,7 +1394,7 @@ EF_ErrCode embedded_flash_set_string(uint8_t key, const char *value) {
 
 EF_ErrCode embedded_flash_set_hex(uint8_t key, const uint8_t *value, uint8_t length) {
     if (value == NULL || length == 0 || length > KV_MAX_VALUE_SIZE) {
-        EFLASH_LOGE("Invalid hex data for key=0x%02X, length=%d\n", key, length);
+        EFLASH_LOGE("hex bad key=0x%02X len=%d\n", key, length);
         return EF_ERR_PARAM;
     }
     return embedded_flash_set(key, value, length, EFLASH_FORMAT_HEX);
@@ -1431,7 +1417,7 @@ static EF_ErrCode _kv_delete_record(uint32_t addr, EmbeddedFlash_record_status_e
 
     result = _write_kv_status(addr, status);
     if (result != EF_OK) {
-        EFLASH_LOGE("Failed to mark as %d for addr=0x%x, result=%d\n", status, addr, result);
+    EFLASH_LOGE("Mark %d fail @0x%x rc=%d\n", status, addr, result);
         return result;
     }
     
@@ -1461,10 +1447,10 @@ static EF_ErrCode _kv_delete_record(uint32_t addr, EmbeddedFlash_record_status_e
  * @return 0=成功, -1=失败
  */
 static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type) {
-    EFLASH_LOGD("[SET] key=0x%02X, type=%d, len=%d\n", key, data_type, length);
+    EFLASH_LOGD("[SET] k=0x%02X t=%d l=%d\n", key, data_type, length);
     
     if (value == NULL) {
-		EFLASH_LOGE("Invalid input for set operation: key=0x%02X, len:%d\n", key,length);
+		EFLASH_LOGE("SET inv input k=0x%02X l=%d\n", key,length);
         return EF_ERR_PARAM;
     }
     
@@ -1473,14 +1459,14 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
     if (expected_length > 0) {
         // 固定长度类型
         if (length != expected_length) {
-            EFLASH_LOGE("Invalid length for key=0x%02X: expected=%d, got=%d\n", key, expected_length, length);
+            EFLASH_LOGE("SET inv len k=0x%02X exp=%d got=%d\n", key, expected_length, length);
             EFLASH_ASSERT(0);
             return EF_ERR_PARAM;
         }
     } else {
         // 可变长度类型（STRING, HEX）
         if (length == 0 || length > KV_MAX_VALUE_SIZE) {
-            EFLASH_LOGE("Invalid length for key=0x%02X: length=%d (must be 1-%d for variable length types)\n", key, length, KV_MAX_VALUE_SIZE);
+            EFLASH_LOGE("SET inv len k=0x%02X l=%d (1-%d)\n", key, length, KV_MAX_VALUE_SIZE);
             EFLASH_ASSERT(0);
             return EF_ERR_PARAM;
         }
@@ -1492,21 +1478,21 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
     if(embedded_flash_get(key, get_value, &get_length, &get_data_type) != EF_OK){
         kv_data_t *p_kv_data = _find_kv_data(key);
         if(p_kv_data == NULL){
-            EFLASH_LOGE("Key not found: %d\n", key);    
+            EFLASH_LOGE("Key not found %d\n", key);    
             return EF_ERR;
         }
         if(p_kv_data->addr_abs == 0){
             // 第一次写入
-            EFLASH_LOGI("First write for key=0x%02X, length=%d, data_type=%d\n", key, length, data_type);
+            EFLASH_LOGI("First write k=0x%02X l=%d t=%d\n", key, length, data_type);
         }else{
             // 未知错误
-            EFLASH_LOGE("Unknown error for key=0x%02X, length=%d, data_type=%d\n", key, length, data_type);
+            EFLASH_LOGE("Unknown err k=0x%02X l=%d t=%d\n", key, length, data_type);
             return EF_ERR;
         }
     }
     if(get_length == length && memcmp(get_value, value, length) == 0 && get_data_type == data_type){
         //重复数据，直接返回
-        EFLASH_LOGI("Duplicate data for key=0x%02X, length=%d, data_type=%d\n", key, length, data_type);
+        EFLASH_LOGI("Dup k=0x%02X l=%d t=%d\n", key, length, data_type);
         return EF_OK;
     }
     /*工作流程
@@ -1550,7 +1536,7 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
     // 步骤1：写入新记录（状态为PRE_WRITE）
     uint32_t new_write_abs_addr = _write_kv_record(&record);
     if(new_write_abs_addr == 0){
-		EFLASH_LOGE("_write_kv_record fail\r\n");
+		EFLASH_LOGE("write rec fail\r\n");
         return EF_ERR_WRITE;
     }
 
@@ -1559,14 +1545,14 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
     // 步骤2：预删除删除旧记录（如果存在且地址不同）
     if(is_update_record_status){
         if(_kv_delete_record(p_kv_data->addr_abs, EFLASH_KV_PRE_DELETE) != EF_OK){
-            EFLASH_LOGW("Failed to pre delete old record at 0x%08X\n", p_kv_data->addr_abs);
+            EFLASH_LOGW("PreDel fail @0x%08X\n", p_kv_data->addr_abs);
             // return EF_ERR_WRITE;
         }
     }
     // 步骤3：将新记录标记为WRITE状态（关键步骤：确保新记录有效）
     // 如果这一步失败，旧记录仍然有效，保证至少有一个WRITE状态的记录
     if(_write_kv_status(new_write_abs_addr, EFLASH_KV_WRITE) != EF_OK){
-		EFLASH_LOGE("write EFLASH_KV_WRITE fail\r\n");
+		EFLASH_LOGE("WRITE set fail\r\n");
         EFLASH_ASSERT(0);
         return EF_ERR_WRITE;
     }
@@ -1575,7 +1561,7 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
     // 注意：删除失败不影响数据完整性，因为新记录已经是WRITE状态
     if(is_update_record_status){
         if(_kv_delete_record(p_kv_data->addr_abs, EFLASH_KV_DELETED) != EF_OK){
-            EFLASH_LOGW("Failed to delete old record at 0x%08X\n", p_kv_data->addr_abs);
+            EFLASH_LOGW("DEL fail @0x%08X\n", p_kv_data->addr_abs);
             // return EF_ERR_WRITE;
         }
     }
@@ -1588,7 +1574,7 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
     p_kv_data->data_source = KV_DATA_SOURCE_UPDATE_WRITE;//更新数据到掉电储存区
 	memcpy(p_kv_data->value, value, length);
 
-    EFLASH_LOGI("Set operation successful for key=0x%02X, addr:0x%x\n", key, new_write_abs_addr);
+    EFLASH_LOGI("SET OK k=0x%02X @0x%x\n", key, new_write_abs_addr);
 
     // printf("p_kv_data->addr_abs:0x%x\n, ", p_kv_data->addr_abs);
     // printf("mp_kv_list[0].addr_abs:0x%x, mp_kv_list[0].key:0x%x\n", mp_kv_list[0].addr_abs, mp_kv_list[0].key);
@@ -1606,13 +1592,13 @@ static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t 
 static int _find_latest_record(kv_data_t *p_kv_data, KV_Record *record, uint32_t *addr) {
     uint32_t read_addr = p_kv_data->addr_abs;
     if(flash_port_read(read_addr, (uint8_t*)record, sizeof(KV_Record)) != EF_OK){
-        EFLASH_LOGE("Failed to read record at stored address=0x%x for key=0x%02X\n", read_addr, p_kv_data->key);
+        EFLASH_LOGE("Read fail @0x%x key=0x%02X\n", read_addr, p_kv_data->key);
 			// _load_kv_record();
         return -1;
     }
     EmbeddedFlash_record_status_e record_status = _is_kv_record(record);
     if (record_status != EFLASH_KV_WRITE){
-        EFLASH_LOGE("Invalid record at stored address=0x%x for key=0x%02X\n", read_addr, p_kv_data->key);
+        EFLASH_LOGE("Bad rec @0x%x key=0x%02X\n", read_addr, p_kv_data->key);
         return -1;
     }
     *addr = read_addr;

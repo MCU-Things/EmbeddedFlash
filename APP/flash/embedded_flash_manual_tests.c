@@ -877,7 +877,7 @@ static void test_embedded_flash_boundary_test(void) {
  */
  static void test_embedded_flash_gc_test(void) {
     //未实现，先跳过
-    printf("test_embedded_flash_gc_test:未实现，先跳过\n");
+    printf("test_embedded_flash_gc_test:NULL\n");
     //1、获取现有所有key的数据
 
     //2、主动调用gc函数
@@ -891,7 +891,7 @@ static void test_embedded_flash_boundary_test(void) {
  */
 static void test_embedded_flash_gc_stress_test(void) {
     //未实现，先跳过
-    printf("test_embedded_flash_gc_stress_test:未实现，先跳过\n");
+    printf("test_embedded_flash_gc_stress_test:NULL\n");
 }
 
 /**
@@ -899,7 +899,7 @@ static void test_embedded_flash_gc_stress_test(void) {
  */
 static void test_embedded_flash_power_loss_test(void) {
     //未实现，先跳过
-    printf("test_embedded_flash_power_loss_test:未实现，先跳过\n");
+    printf("test_embedded_flash_power_loss_test:NULL\n");
     // TEST_MESSAGE("Testing power loss recovery...");
     
     // // ========== 阶段1: 写入测试数据 ==========
@@ -973,7 +973,7 @@ static void test_embedded_flash_power_loss_test(void) {
  */
  static void test_embedded_flash_power_loss_stress_test(void) {
     //未实现，先跳过
-    printf("test_embedded_flash_power_loss_stress_test:未实现，先跳过\n");
+    printf("test_embedded_flash_power_loss_stress_test:NULL\n");
     // TEST_MESSAGE("Testing power loss recovery under stress...");
     
     // // 执行多次掉电恢复测试
@@ -1354,7 +1354,7 @@ static void test_embedded_flash_stress_test(void) {
  */
 static void test_embedded_flash_enhanced_random_data_test(void) {
    //未实现，先跳过
-   printf("test_embedded_flash_enhanced_random_data_test:未实现，先跳过\n");
+   printf("test_embedded_flash_enhanced_random_data_test:NULL\n");
 }
 
 

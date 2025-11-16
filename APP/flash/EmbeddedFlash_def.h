@@ -19,21 +19,21 @@
 #define EFLASH_LOG_TAG "EmbeddedFlash"
 #endif
 
-#ifndef EFLASH_PRINTF_REAL
-static inline int EFLASH_PRINTF_REAL(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vprintf(fmt, ap);
-    va_end(ap);
-    return n;
-}
-#endif
+// #ifndef EFLASH_PRINTF_REAL
+// static inline int EFLASH_PRINTF_REAL(const char *fmt, ...) {
+//     va_list ap;
+//     va_start(ap, fmt);
+//     int n = vprintf(fmt, ap);
+//     va_end(ap);
+//     return n;
+// }
+// #endif
 
 #ifndef EFLASH_LOG
 #define EFLASH_LOG(level, fmt, ...)                                                       \
     do {                                                                                  \
         if ((level) >= EFLASH_LOG_LEVEL && (level) < EFLASH_LOG_LEVEL_NONE) {             \
-            EFLASH_PRINTF_REAL("[" EFLASH_LOG_TAG "][%s] " fmt,                            \
+            printf("[" EFLASH_LOG_TAG "][%s] " fmt,                            \
                    (level)==EFLASH_LOG_LEVEL_DEBUG ? "DEBUG" :                            \
                    (level)==EFLASH_LOG_LEVEL_INFO  ? "INFO " :                            \
                    (level)==EFLASH_LOG_LEVEL_WARN  ? "WARN " :                            \

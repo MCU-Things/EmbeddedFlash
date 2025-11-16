@@ -69,10 +69,10 @@ int main()
 			printf("  Unity Tests FAILED: %d test(s) failed\r\n", test_result);
 		}
 		printf("========================================\r\n\r\n");
-		
+		#if EFLASH_ENABLE_ERASE_COUNTER
 		// 打印擦除统计信息
 		embedded_flash_print_erase_stats();
-		
+		#endif
 		// 测试完成后进入循环
 		printf("Unity tests completed. Entering main loop...\r\n");
 	#else
