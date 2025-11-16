@@ -9,8 +9,8 @@
  */
 
 #include "EmbeddedFlash_port.h"
+#include "EmbeddedFlash_def.h"
 #include "stm32f10x_flash.h"
-#include <stdio.h>
 #include <string.h>
 
 /**
@@ -41,8 +41,8 @@ EF_ErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size) {
     /* 参数检查 */
     if (addr < FLASH_START_ADDR || addr > FLASH_END_ADDR || 
         size > (FLASH_END_ADDR - addr + 1) || buf == NULL) {
-        printf("Flash: Invalid read parameters, addr=0x%08X, size=%d, buf=%p\n", 
-               addr, size, buf);
+        EFLASH_LOGE("Flash: Invalid read parameters, addr=0x%08X, size=%d, buf=%p\n", 
+               addr, (int)size, buf);
         return EF_ERR_PARAM;
     }
 
@@ -76,7 +76,7 @@ EF_ErrCode flash_port_erase(uint32_t addr, size_t size) {
     
     /* 确保起始地址按页对齐 */
     if (addr % FLASH_PAGE_SIZE != 0) {
-        printf("Flash: Address not page aligned: 0x%08X\n", addr);
+        EFLASH_LOGE("Flash: Address not page aligned: 0x%08X\n", addr);
         return EF_ERR_ADDR_ALIGN;
     }
     
@@ -96,8 +96,8 @@ EF_ErrCode flash_port_erase(uint32_t addr, size_t size) {
         flash_status = FLASH_ErasePage(page_addr);
         
         if (flash_status != FLASH_COMPLETE) {
-            printf("Flash: Erase failed at page %d, addr=0x%08X, status=%d\n", 
-                   i, page_addr, flash_status);
+            EFLASH_LOGE("Flash: Erase failed at page %d, addr=0x%08X, status=%d\n", 
+                   (int)i, page_addr, (int)flash_status);
             result = EF_ERR_ERASE;
             break;
         }
@@ -128,19 +128,19 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
     /* 参数检查 */
     if (addr < FLASH_START_ADDR || addr > FLASH_END_ADDR || 
         size > (FLASH_END_ADDR - addr + 1) || buf == NULL) {
-        printf("Flash: Invalid parameters - addr=0x%08X, size=%d, buf=%p\n", addr, size, buf);
+        EFLASH_LOGE("Flash: Invalid parameters - addr=0x%08X, size=%d, buf=%p\n", addr, (int)size, buf);
         return EF_ERR_PARAM;
     }
 
     /* 检查地址和大小对齐 */
     if (addr % 4 != 0) {
-        printf("Flash: Address not 4-byte aligned: 0x%08X\n", addr);
+        EFLASH_LOGE("Flash: Address not 4-byte aligned: 0x%08X\n", addr);
         return EF_ERR_ADDR_ALIGN;
     }
     
     /* 检查大小对齐 */
     if (size % 4 != 0) {
-        printf("Flash: Size not 4-byte aligned: %d\n", size);
+        EFLASH_LOGE("Flash: Size not 4-byte aligned: %d\n", (int)size);
         return EF_ERR_SIZE_ALIGN;
     }
 
@@ -153,7 +153,7 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
         if (flash_status == FLASH_ERROR_PG)
         {
             //数据重复，跳过
-            printf("Flash: Data already exists at 0x%08X, value=0x%08X\n", addr, *buf_32);
+            EFLASH_LOGD("Flash: Data already exists at 0x%08X, value=0x%08X\n", addr, *buf_32);
             continue;
         }
         
@@ -162,13 +162,13 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
             read_data = *(uint32_t *)addr;
             if (read_data != *buf_32) {
                 result = EF_ERR_WRITE;
-                printf("Flash: Verification failed at 0x%08X, expected=0x%08X, actual=0x%08X\n",
+                EFLASH_LOGE("Flash: Verification failed at 0x%08X, expected=0x%08X, actual=0x%08X\n",
                        addr, *buf_32, read_data);
                 break;
             }
         } else {
             result = EF_ERR_WRITE;
-            printf("Flash: Program failed at 0x%08X, status=%d\n", addr, flash_status);
+            EFLASH_LOGE("Flash: Program failed at 0x%08X, status=%d\n", addr, (int)flash_status);
             break;
         }
     }
@@ -177,7 +177,7 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
     
     /* 如果部分写入成功，返回部分成功错误码 */
     if (result != EF_OK && i > 0 && i < size) {
-        printf("Flash: Partial write completed - %d/%d bytes written successfully\n", i, size);
+        EFLASH_LOGW("Flash: Partial write completed - %d/%d bytes written successfully\n", (int)i, (int)size);
         result = EF_ERR_WRITE; // 仍然返回错误，但已尝试最大努力写入
     }
 
@@ -209,64 +209,64 @@ EF_ErrCode flash_port_test(uint32_t test_addr) {
     uint8_t read_data[4] = {0};
     size_t i;
     
-    printf("\n========== Flash Port Test ==========\n");
-    printf("Test Address: 0x%08X\n", test_addr);
+    EFLASH_LOGI("========== Flash Port Test ==========\n");
+    EFLASH_LOGI("Test Address: 0x%08X\n", test_addr);
     
     /* 测试1: 擦除Flash */
-    printf("1. Erasing Flash...\n");
+    EFLASH_LOGI("1. Erasing Flash...\n");
     result = flash_port_erase(test_addr, FLASH_PAGE_SIZE);
     if (result != EF_OK) {
-        printf("❌ Flash erase failed, error=%d\n", result);
+        EFLASH_LOGE("Flash erase failed, error=%d\n", (int)result);
         return result;
     }
-    printf("✅ Flash erase successful\n");
+    EFLASH_LOGI("Flash erase successful\n");
     
     /* 验证擦除结果 */
-    printf("2. Verifying erase...\n");
+    EFLASH_LOGI("2. Verifying erase...\n");
     result = flash_port_read(test_addr, read_data, 4);
     if (result != EF_OK) {
-        printf("❌ Flash read failed, error=%d\n", result);
+        EFLASH_LOGE("Flash read failed, error=%d\n", (int)result);
         return result;
     }
     
     for (i = 0; i < 4; i++) {
         if (read_data[i] != 0xFF) {
-            printf("❌ Erase verification failed at offset %d: expected=0xFF, actual=0x%02X\n", 
-                   i, read_data[i]);
+            EFLASH_LOGE("Erase verification failed at offset %d: expected=0xFF, actual=0x%02X\n", 
+                   (int)i, read_data[i]);
             return EF_ERR_ERASE;
         }
     }
-    printf("✅ Erase verification successful\n");
+    EFLASH_LOGI("Erase verification successful\n");
     
     /* 测试2: 写入数据 */
-    printf("3. Writing test data...\n");
+    EFLASH_LOGI("3. Writing test data...\n");
     result = flash_port_write(test_addr, test_data, 4);
     if (result != EF_OK) {
-        printf("❌ Flash write failed, error=%d\n", result);
+        EFLASH_LOGE("Flash write failed, error=%d\n", (int)result);
         return result;
     }
-    printf("✅ Flash write successful\n");
+    EFLASH_LOGI("Flash write successful\n");
     
     /* 测试3: 读取并验证数据 */
-    printf("4. Reading and verifying data...\n");
+    EFLASH_LOGI("4. Reading and verifying data...\n");
     memset(read_data, 0, sizeof(read_data));
     result = flash_port_read(test_addr, read_data, 4);
     if (result != EF_OK) {
-        printf("❌ Flash read failed, error=%d\n", result);
+        EFLASH_LOGE("Flash read failed, error=%d\n", (int)result);
         return result;
     }
     
     for (i = 0; i < 4; i++) {
         if (read_data[i] != test_data[i]) {
-            printf("❌ Data mismatch at offset %d: expected=0x%02X, actual=0x%02X\n", 
-                   i, test_data[i], read_data[i]);
+            EFLASH_LOGE("Data mismatch at offset %d: expected=0x%02X, actual=0x%02X\n", 
+                   (int)i, test_data[i], read_data[i]);
             return EF_ERR_VERIFY;
         }
     }
-    printf("✅ Data verification successful\n");
+    EFLASH_LOGI("Data verification successful\n");
     
-    printf("========== Flash Port Test Complete ==========\n");
-    printf("✅ All tests passed!\n\n");
+    EFLASH_LOGI("========== Flash Port Test Complete ==========\n");
+    EFLASH_LOGI("All tests passed!\n");
     
     return EF_OK;
 }

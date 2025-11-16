@@ -64,5 +64,19 @@
 #define SECTOR_ROLE_TABLE_SIZE      STATUS_TABLE_SIZE(SECTOR_ROLE_NUM)
 #define KV_STATUS_TABLE_SIZE        STATUS_TABLE_SIZE(KV_STATUS_NUM)
 
+/* ==================== 日志等级配置 ==================== */
+// 等级从低到高：ALL(全部) < DEBUG(调试) < INFO(信息) < WARN(危险/告警) < ERROR(错误) < NONE(关闭)
+#define EFLASH_LOG_LEVEL_ALL    0
+#define EFLASH_LOG_LEVEL_DEBUG  1
+#define EFLASH_LOG_LEVEL_INFO   2
+#define EFLASH_LOG_LEVEL_WARN   3
+#define EFLASH_LOG_LEVEL_ERROR  4
+#define EFLASH_LOG_LEVEL_NONE   5
+
+// 默认日志等级（可根据需要修改）：INFO 更加精简，DEBUG 更详细
+#ifndef EFLASH_LOG_LEVEL
+#define EFLASH_LOG_LEVEL EFLASH_LOG_LEVEL_NONE
+#endif
+
 #endif /* __EMBEDDED_FLASH_CONFIG_H__ */
 
