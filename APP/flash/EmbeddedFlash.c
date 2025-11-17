@@ -13,12 +13,7 @@
 #include <string.h>
 
 // 全局变量
-static sector_desc_t m_sector_desc_list[KV_SECTOR_COUNT] = {
-    {.sector_addr = KV_SECTOR_START_ADDR+0*KV_SECTOR_SIZE, .sector_idx = 0, .attr = {EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_UNASSIGNED}, .free_space = KV_SECTOR_SIZE - sizeof(sector_header_t), .record_count = 0},
-    {.sector_addr = KV_SECTOR_START_ADDR+1*KV_SECTOR_SIZE, .sector_idx = 1, .attr = {EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_UNASSIGNED}, .free_space = KV_SECTOR_SIZE - sizeof(sector_header_t), .record_count = 0},
-    {.sector_addr = KV_SECTOR_START_ADDR+2*KV_SECTOR_SIZE, .sector_idx = 2, .attr = {EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_UNASSIGNED}, .free_space = KV_SECTOR_SIZE - sizeof(sector_header_t), .record_count = 0},
-    {.sector_addr = KV_SECTOR_START_ADDR+3*KV_SECTOR_SIZE, .sector_idx = 3, .attr = {EFLASH_SECTOR_STATUS_FREE, EFLASH_SECTOR_ROLE_UNASSIGNED}, .free_space = KV_SECTOR_SIZE - sizeof(sector_header_t), .record_count = 0}
-};
+static sector_desc_t m_sector_desc_list[KV_SECTOR_COUNT] = {0};
 static kv_data_t *mp_kv_list = NULL;  // 指向外部默认配置
 static uint8_t m_kv_data_list_count = 0;
 
@@ -102,7 +97,7 @@ static EF_ErrCode _sector_magic_write(uint8_t sector_idx)
     uint32_t magic_addr = sector_addr + magic_offset;
     
     // 写入魔术字
-	  uint32_t data = SECTOR_HEADER_MAGIC_WORD;
+	uint32_t data = SECTOR_HEADER_MAGIC_WORD;
     if (flash_port_write(magic_addr, (uint8_t*)&data, sizeof(uint32_t)) != EF_OK) {
         EFLASH_LOGE("Magic write fail @0x%08X\n", magic_addr);
         return EF_ERR_WRITE;
@@ -1244,7 +1239,14 @@ EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count)
     EFLASH_LOGD("KV_BASE=0x%08X\n", KV_SECTOR_START_ADDR);
     EFLASH_LOGD("KV_SIZE=%d\n", KV_SECTOR_SIZE);
     EFLASH_LOGD("KV_CNT=%d\n", KV_SECTOR_COUNT);
-    
+    for (uint8_t i = 0; i < KV_SECTOR_COUNT; i++) {
+        m_sector_desc_list[i].sector_addr = KV_SECTOR_START_ADDR + ((uint32_t)i * KV_SECTOR_SIZE);
+        m_sector_desc_list[i].sector_idx  = i;
+        m_sector_desc_list[i].attr.status = EFLASH_SECTOR_STATUS_FREE;
+        m_sector_desc_list[i].attr.role   = EFLASH_SECTOR_ROLE_UNASSIGNED;
+        m_sector_desc_list[i].free_space  = KV_SECTOR_SIZE - sizeof(sector_header_t);
+        m_sector_desc_list[i].record_count = 0;
+    }
     // 调试：打印扇区头和KV记录结构体大小
     EFLASH_LOGD("hdr=%dB st=%dB role=%dB kv=%dB kvst=%dB kvoff=%d gran=%db\n", 
         (int)sizeof(sector_header_t), SECTOR_STATUS_TABLE_SIZE, SECTOR_ROLE_TABLE_SIZE, 

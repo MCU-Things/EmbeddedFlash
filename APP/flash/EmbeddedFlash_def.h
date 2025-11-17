@@ -13,6 +13,11 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+
+
+
+
+
 /* ==================== 日志输出宏 ==================== */
 // 统一的日志入口，带有等级筛选与模块名前缀
 #ifndef EFLASH_LOG_TAG
@@ -238,8 +243,8 @@ typedef struct {
 
 /* 扇区描述符，用于运行时跟踪和管理扇区 */
 typedef struct {
-    const uint32_t  sector_addr;    // 扇区地址
-    const uint8_t   sector_idx;     // 扇区索引(固定值) 0-3，按地址顺序排列
+    uint32_t  sector_addr;    // 扇区地址
+    uint8_t   sector_idx;     // 扇区索引(固定值) 0-3，按地址顺序排列
     sector_attr_t   attr;           // 扇区属性信息
     uint16_t        free_space;     // 剩余空间
     uint16_t        record_count;   // 记录数
