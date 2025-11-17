@@ -876,14 +876,213 @@ static void test_embedded_flash_boundary_test(void) {
  * @brief GC测试 - 测试垃圾回收功能
  */
  static void test_embedded_flash_gc_test(void) {
-    //未实现，先跳过
-    printf("test_embedded_flash_gc_test:NULL\n");
+    printf("test_embedded_flash_gc_test:\n");
     //1、获取现有所有key的数据
-
     //2、主动调用gc函数
-
     //3、回读所有key的数据是否发生变化
 
+    // 定义压力测试参数
+    #define GC_TEST_OPERATIONS 100  // gc测试操作次数
+    // 直接使用 test_kvs 做轮询，去除中间 test_keys 数组，进一步降低耦合与复杂度
+    uint8_t num_test_keys = (uint8_t)(sizeof(test_kvs) / sizeof(test_kvs[0]));
+    if (num_test_keys == 0) {
+        TEST_FAIL_MESSAGE("Stress test: test_kvs is empty");
+        return;
+    }
+    
+    // 数据缓冲区
+    union {
+        bool bool_val;
+        uint8_t uint8_val;
+        int8_t int8_val;
+        uint16_t uint16_val;
+        int16_t int16_val;
+        uint32_t uint32_val;
+        int32_t int32_val;
+        uint64_t uint64_val;
+        int64_t int64_val;
+        float float_val;
+        char string_val[KV_MAX_VALUE_SIZE];
+        uint8_t hex_val[KV_MAX_VALUE_SIZE];
+        uint8_t raw[KV_MAX_VALUE_SIZE];
+    } write_data, read_data;
+    
+    // 压力测试循环
+    for (int i = 0; i < GC_TEST_OPERATIONS; i++) {
+        // 循环选择键
+        uint8_t key_idx = i % num_test_keys;
+        uint8_t key = test_kvs[key_idx].key;
+        uint8_t data_type = test_kvs[key_idx].data_type;
+        
+        // 清空缓冲区
+        memset(&write_data, 0, sizeof(write_data));
+        memset(&read_data, 0, sizeof(read_data));
+        
+        // 根据数据类型生成测试数据并写入
+        EF_ErrCode err = EF_ERR;
+        uint8_t expected_len = 0;
+        
+        switch (data_type) {
+            case EFLASH_FORMAT_BOOL:
+                write_data.bool_val = (i % 2) ? true : false;
+                err = embedded_flash_set_bool(key, write_data.bool_val);
+                expected_len = 1;
+                break;
+                
+            case EFLASH_FORMAT_UINT8:
+                write_data.uint8_val = (uint8_t)(i & 0xFF);
+                err = embedded_flash_set_uint8(key, write_data.uint8_val);
+                expected_len = 1;
+                break;
+                
+            case EFLASH_FORMAT_INT8:
+                write_data.int8_val = (int8_t)((i % 256) - 128);
+                err = embedded_flash_set_int8(key, write_data.int8_val);
+                expected_len = 1;
+                break;
+                
+            case EFLASH_FORMAT_UINT16:
+                write_data.uint16_val = (uint16_t)(i & 0xFFFF);
+                err = embedded_flash_set_uint16(key, write_data.uint16_val);
+                expected_len = 2;
+                break;
+                
+            case EFLASH_FORMAT_INT16:
+                write_data.int16_val = (int16_t)((i % 65536) - 32768);
+                err = embedded_flash_set_int16(key, write_data.int16_val);
+                expected_len = 2;
+                break;
+                
+            case EFLASH_FORMAT_UINT32:
+                write_data.uint32_val = (uint32_t)(i * 1000);
+                err = embedded_flash_set_uint32(key, write_data.uint32_val);
+                expected_len = 4;
+                break;
+                
+            case EFLASH_FORMAT_INT32:
+                write_data.int32_val = (int32_t)(i * 100 - 50000);
+                err = embedded_flash_set_int32(key, write_data.int32_val);
+                expected_len = 4;
+                break;
+                
+            case EFLASH_FORMAT_UINT64:
+                write_data.uint64_val = (uint64_t)i * 1000000ULL;
+                err = embedded_flash_set_uint64(key, write_data.uint64_val);
+                expected_len = 8;
+                break;
+                
+            case EFLASH_FORMAT_INT64:
+                write_data.int64_val = (int64_t)i * 1000000LL - 500000000LL;
+                err = embedded_flash_set_int64(key, write_data.int64_val);
+                expected_len = 8;
+                break;
+                
+            case EFLASH_FORMAT_FLOAT:
+                write_data.float_val = (float)(i * 0.123f + 3.14159f);
+                err = embedded_flash_set_float(key, write_data.float_val);
+                expected_len = 4;
+                break;
+                
+            case EFLASH_FORMAT_STRING: {
+                // 生成变化的字符串，确保不超过KV_MAX_VALUE_SIZE-1字节
+                // 使用简单的字符串生成方法，避免依赖snprintf
+                uint16_t val = i % 1000;
+                if (val < 10) {
+                    write_data.string_val[0] = 'T';
+                    write_data.string_val[1] = '0' + val;
+                    write_data.string_val[2] = '\0';
+                } else if (val < 100) {
+                    write_data.string_val[0] = 'T';
+                    write_data.string_val[1] = '0' + (val / 10);
+                    write_data.string_val[2] = '0' + (val % 10);
+                    write_data.string_val[3] = '\0';
+                } else {
+                    write_data.string_val[0] = 'T';
+                    write_data.string_val[1] = '0' + (val / 100);
+                    write_data.string_val[2] = '0' + ((val / 10) % 10);
+                    write_data.string_val[3] = '0' + (val % 10);
+                    write_data.string_val[4] = '\0';
+                }
+                err = embedded_flash_set_string(key, write_data.string_val);
+                expected_len = strlen(write_data.string_val) + 1;
+                break;
+            }
+                
+            case EFLASH_FORMAT_HEX: {
+                // 生成4字节的HEX数据
+                write_data.hex_val[0] = (uint8_t)(i & 0xFF);
+                write_data.hex_val[1] = (uint8_t)((i >> 8) & 0xFF);
+                write_data.hex_val[2] = (uint8_t)((i >> 16) & 0xFF);
+                write_data.hex_val[3] = (uint8_t)((i >> 24) & 0xFF);
+                err = embedded_flash_set_hex(key, write_data.hex_val, 4);
+                expected_len = 4;
+                break;
+            }
+                
+            default:
+                TEST_FAIL_MESSAGE("Unsupported data type in stress test");
+                return;
+        }
+        
+        TEST_ASSERT_EQUAL_INT(EF_OK, err);
+
+        //gc
+        err = embedded_flash_gc();
+        TEST_ASSERT_EQUAL_INT(EF_OK, err);
+
+        // 立即读取验证
+        uint8_t read_len = 0;
+        uint8_t read_type = 0;
+        err = embedded_flash_get(key, read_data.raw, &read_len, &read_type);
+        TEST_ASSERT_EQUAL_INT(EF_OK, err);
+        // 验证类型
+        TEST_ASSERT_EQUAL_UINT8(data_type, read_type); 
+        // 验证长度
+        TEST_ASSERT_EQUAL_UINT8(expected_len, read_len);
+        // 验证数据值
+        switch (data_type) {
+            case EFLASH_FORMAT_BOOL:
+                TEST_ASSERT_EQUAL_UINT8(write_data.bool_val, read_data.bool_val);
+                break;
+            case EFLASH_FORMAT_UINT8:
+                TEST_ASSERT_EQUAL_UINT8(write_data.uint8_val, read_data.uint8_val);
+                break;
+            case EFLASH_FORMAT_INT8:
+                TEST_ASSERT_EQUAL_INT8(write_data.int8_val, read_data.int8_val);
+                break;
+            case EFLASH_FORMAT_UINT16:
+                TEST_ASSERT_EQUAL_UINT16(write_data.uint16_val, read_data.uint16_val);
+                break;
+            case EFLASH_FORMAT_INT16:
+                TEST_ASSERT_EQUAL_INT16(write_data.int16_val, read_data.int16_val);
+                break;
+            case EFLASH_FORMAT_UINT32:
+                TEST_ASSERT_EQUAL_UINT32(write_data.uint32_val, read_data.uint32_val);
+                break;
+            case EFLASH_FORMAT_INT32:
+                TEST_ASSERT_EQUAL_INT32(write_data.int32_val, read_data.int32_val);
+                break;
+            case EFLASH_FORMAT_UINT64:
+                TEST_ASSERT_EQUAL_UINT64(write_data.uint64_val, read_data.uint64_val);
+                break;
+            case EFLASH_FORMAT_INT64:
+                TEST_ASSERT_EQUAL_INT64(write_data.int64_val, read_data.int64_val);
+                break;
+            case EFLASH_FORMAT_FLOAT:
+                // 浮点数比较，允许小的误差
+                TEST_ASSERT_EQUAL_FLOAT(write_data.float_val, read_data.float_val);
+                break;
+            case EFLASH_FORMAT_STRING:
+                TEST_ASSERT_EQUAL_STRING(write_data.string_val, read_data.string_val);
+                break;
+            case EFLASH_FORMAT_HEX:
+                TEST_ASSERT_EQUAL_UINT8_ARRAY(write_data.hex_val, read_data.hex_val, expected_len);
+                break;
+            default:
+                TEST_FAIL_MESSAGE("Unsupported data type in stress test");
+                break;
+        }
+    }
 }
 
 /**
