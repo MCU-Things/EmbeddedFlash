@@ -78,6 +78,7 @@ static EF_ErrCode _init_all_kv_record(void);
 static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_addr));
 static EF_ErrCode _load_kv_record_callback(KV_Record *record, uint32_t abs_addr);
 static EF_ErrCode _load_kv_record(void);
+static EF_ErrCode _recover_sector_and_kv_record(void);
 /* ---  核心API实现 --- */
 static EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type);
 
@@ -97,13 +98,13 @@ static EF_ErrCode _sector_magic_write(uint8_t sector_idx)
     uint32_t magic_addr = sector_addr + magic_offset;
     
     // 写入魔术字
-	uint32_t data = SECTOR_HEADER_MAGIC_WORD;
+		uint32_t data = SECTOR_HEADER_MAGIC_WORD;
     if (flash_port_write(magic_addr, (uint8_t*)&data, sizeof(uint32_t)) != EF_OK) {
-        EFLASH_LOGE("Magic write fail @0x%08X\n", magic_addr);
+        EFLASH_LOGD("Magic write fail @0x%08X\n", magic_addr);
         return EF_ERR_WRITE;
     }
     
-    EFLASH_LOGI("Magic OK S%d @0x%08X\n", sector_idx, magic_addr);
+    EFLASH_LOGD("Magic OK S%d @0x%08X\n", sector_idx, magic_addr);
     return EF_OK;
 }
 /**
@@ -548,7 +549,7 @@ static uint32_t _write_kv_record_to_sector(uint8_t sector_idx, KV_Record *p)
     
     // 写入Flash
     if (flash_port_write(write_addr, (uint8_t*)p, sizeof(KV_Record)) != EF_OK){
-				EFLASH_LOGE("Failed to write record to sector %d, addr=0x%08X\n", sector_idx, write_addr);
+				EFLASH_LOGD("Failed to write record to sector %d, addr=0x%08X\n", sector_idx, write_addr);
         EFLASH_PRINT_HEX("record",(uint8_t*)p, sizeof(KV_Record));
         EFLASH_ASSERT(0);
         return 0;  // 返回0表示失败
@@ -1138,6 +1139,42 @@ EF_ErrCode _rebuild_sector(void)
     return EF_OK;
 }
 
+/**
+ * @brief 恢复和重建扇区
+ * 在异常状态下，加载KV记录、重建扇区、重新加载并初始化所有KV记录
+ * @return EF_ErrCode 操作结果
+ */
+static EF_ErrCode _recover_sector_and_kv_record(void)
+{
+    EF_ErrCode ret;
+    
+    ret = _load_kv_record();
+    if(ret != EF_OK){
+        EFLASH_LOGE("Failed to load KV records\n");
+        return ret;
+    }
+    
+    ret = _rebuild_sector();
+    if(ret != EF_OK){
+        EFLASH_LOGE("Failed to rebuild sector\n");
+        return ret;
+    }
+    
+    ret = _load_kv_record();
+    if(ret != EF_OK){
+        EFLASH_LOGE("Failed to load KV records\n");
+        return ret;
+    }
+    
+    ret = _init_all_kv_record();
+    if(ret != EF_OK){
+        EFLASH_LOGE("Failed to initialize all KV records\n");
+        return ret;
+    }
+    
+    return EF_OK;
+}
+
 //查找指定扇区角色
 static int _find_sector_role(uint8_t role)
 {
@@ -1159,6 +1196,7 @@ EF_ErrCode embedded_flash_gc(void)
     embedded_flash_att_status_t status = embedded_flash_get_attr_status();
     if(status != EFLASH_STATUS_NORMAL){
         EFLASH_LOGE("GC deny st=%d\n", status);
+        _recover_sector_and_kv_record();
         EFLASH_ASSERT(0);
         return EF_ERR_NOT_INIT;
     }
@@ -1210,7 +1248,6 @@ EF_ErrCode embedded_flash_gc(void)
     m_sector_desc_list[data_sector_idx].attr.role = EFLASH_SECTOR_ROLE_GC;
 
     if(_sector_magic_write(data_sector_idx) != EF_OK){
-        EFLASH_LOGE("Magic fail S%d\n", data_sector_idx);
         return EF_ERR;
     }
 
@@ -1308,26 +1345,10 @@ EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count)
             }
             break;
        default:
-            ret = _load_kv_record();
+            ret = _recover_sector_and_kv_record();
             if(ret != EF_OK){
-                EFLASH_LOGE("Failed to load KV records\n");
                 return ret;
             }
-            ret = _rebuild_sector();
-            if(ret != EF_OK){
-                EFLASH_LOGE("Failed to rebuild sector\n");
-                return ret;
-            }
-            ret = _load_kv_record();
-            if(ret != EF_OK){
-                EFLASH_LOGE("Failed to load KV records\n");
-                return ret;
-            }
-            ret = _init_all_kv_record();
-            if(ret != EF_OK){
-                EFLASH_LOGE("Failed to initialize all KV records\n");
-                return ret;
-            }   
             break;
     }
     return ret;

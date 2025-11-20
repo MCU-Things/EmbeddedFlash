@@ -75,7 +75,7 @@
 
 // 默认日志等级（可根据需要修改）：INFO 更加精简，DEBUG 更详细
 #ifndef EFLASH_LOG_LEVEL
-#define EFLASH_LOG_LEVEL EFLASH_LOG_LEVEL_NONE
+#define EFLASH_LOG_LEVEL EFLASH_LOG_LEVEL_ALL
 #endif
 
 #endif /* __EMBEDDED_FLASH_CONFIG_H__ */

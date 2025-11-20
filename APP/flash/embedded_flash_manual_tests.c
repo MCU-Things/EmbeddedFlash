@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <math.h>
 #include "stm32f10x.h"
 
@@ -1094,6 +1095,345 @@ static void test_embedded_flash_gc_stress_test(void) {
 }
 
 /**
+ * @brief 破坏扇区头信息的辅助函数
+ * 
+ * 此函数会先读取整个扇区到缓冲区，然后修改缓冲区中的扇区头信息，
+ * 最后擦除扇区并写入修改后的缓冲区，确保不会破坏扇区中的KV数据。
+ * 
+ * @param sector_idx 扇区索引（0到KV_SECTOR_COUNT-1）
+ * @param corrupt_magic 是否破坏magic word（true=破坏，false=不破坏）
+ * @param corrupt_status 是否破坏状态表（true=破坏，false=不破坏）
+ * @param corrupt_role 是否破坏角色表（true=破坏，false=不破坏）
+ * @return EF_ErrCode 操作结果
+ */
+static EF_ErrCode corrupt_sector_header(uint8_t sector_idx, bool corrupt_magic, bool corrupt_status, bool corrupt_role) {
+    if (sector_idx >= KV_SECTOR_COUNT) {
+        return EF_ERR_PARAM;
+    }
+    
+    // 检查是否至少破坏一项
+    if (!corrupt_magic && !corrupt_status && !corrupt_role) {
+        return EF_ERR_PARAM;
+    }
+    
+    uint32_t sector_addr = KV_SECTOR_START_ADDR + ((uint32_t)sector_idx * KV_SECTOR_SIZE);
+    
+    // 使用静态缓冲区，读取整个扇区（最大2KB）
+    static uint8_t sector_buffer[KV_SECTOR_SIZE];
+    
+    // 读取整个扇区到缓冲区
+    EF_ErrCode err = flash_port_read(sector_addr, sector_buffer, KV_SECTOR_SIZE);
+    if (err != EF_OK) {
+        return err;
+    }
+    
+    // 修改缓冲区中的扇区头信息
+    sector_header_t *header = (sector_header_t*)sector_buffer;
+    
+    if (corrupt_magic) {
+        // 破坏magic word
+        header->magic = 0xDEADBEEF;
+    }
+    
+    if (corrupt_status) {
+        // 破坏状态表：填充为0xAA
+        memset(header->status_table, 0xAA, sizeof(header->status_table));
+    }
+    
+    if (corrupt_role) {
+        // 破坏角色表：填充为0x55
+        memset(header->role_table, 0x55, sizeof(header->role_table));
+    }
+    
+    // 擦除扇区
+    flash_port_lock();
+    err = flash_port_erase(sector_addr, KV_SECTOR_SIZE);
+    if (err != EF_OK) {
+        flash_port_unlock();
+        return err;
+    }
+    
+    // 写入修改后的缓冲区
+    err = flash_port_write(sector_addr, sector_buffer, KV_SECTOR_SIZE);
+    flash_port_unlock();
+    
+    return err;
+}
+
+/**
+ * @brief 扇区头破坏恢复测试 - 随机破坏扇区头信息，验证GC能否恢复并保证数据正确
+ * 
+ * 测试步骤：
+ * 1. 写入所有test_kvs中的键值对数据
+ * 2. 保存所有数据快照
+ * 3. 随机破坏部分扇区的头信息（magic word、状态表、角色表）
+ * 4. 重新初始化（应该触发恢复流程）
+ * 5. 验证所有数据是否正确恢复
+ * 
+ * 参考：test_embedded_flash_stress_test 的实现风格
+ */
+static void test_embedded_flash_sector_header_corruption_recovery(void) {
+    UnityPrint("Running test_embedded_flash_sector_header_corruption_recovery...\n");
+    
+    // 基本检查
+    uint8_t num_test_keys = (uint8_t)(sizeof(test_kvs) / sizeof(test_kvs[0]));
+    if (num_test_keys == 0) {
+        TEST_FAIL_MESSAGE("Sector header corruption test: test_kvs is empty");
+        return;
+    }
+    
+    // 数据缓冲区
+    union {
+        bool bool_val;
+        uint8_t uint8_val;
+        int8_t int8_val;
+        uint16_t uint16_val;
+        int16_t int16_val;
+        uint32_t uint32_val;
+        int32_t int32_val;
+        uint64_t uint64_val;
+        int64_t int64_val;
+        float float_val;
+        char string_val[KV_MAX_VALUE_SIZE];
+        uint8_t hex_val[KV_MAX_VALUE_SIZE];
+        uint8_t raw[KV_MAX_VALUE_SIZE];
+    } write_data, read_data;
+    
+    // 快照结构
+    typedef struct {
+        uint8_t type;
+        uint8_t len;
+        uint8_t data[KV_MAX_VALUE_SIZE];
+        bool exists;  // 标记数据是否存在
+    } kv_snapshot_t;
+    
+    kv_snapshot_t snapshots[sizeof(test_kvs) / sizeof(test_kvs[0])];
+    
+    // ========== 步骤1: 写入所有键值对数据 ==========
+    UnityPrint("Step 1: Writing all test data...\n");
+    for (uint8_t i = 0; i < num_test_keys; i++) {
+        uint8_t key = test_kvs[i].key;
+        uint8_t data_type = test_kvs[i].data_type;
+        
+        // 清空缓冲区
+        memset(&write_data, 0, sizeof(write_data));
+        
+        // 根据数据类型生成测试数据并写入
+        EF_ErrCode err = EF_ERR;
+        uint8_t expected_len = 0;
+        
+        switch (data_type) {
+            case EFLASH_FORMAT_BOOL:
+                write_data.bool_val = (i % 2) ? true : false;
+                err = embedded_flash_set_bool(key, write_data.bool_val);
+                expected_len = 1;
+                break;
+            case EFLASH_FORMAT_UINT8:
+                write_data.uint8_val = (uint8_t)(0x10 + i);
+                err = embedded_flash_set_uint8(key, write_data.uint8_val);
+                expected_len = 1;
+                break;
+            case EFLASH_FORMAT_INT8:
+                write_data.int8_val = (int8_t)(-50 - i);
+                err = embedded_flash_set_int8(key, write_data.int8_val);
+                expected_len = 1;
+                break;
+            case EFLASH_FORMAT_UINT16:
+                write_data.uint16_val = (uint16_t)(500 + i * 10);
+                err = embedded_flash_set_uint16(key, write_data.uint16_val);
+                expected_len = 2;
+                break;
+            case EFLASH_FORMAT_INT16:
+                write_data.int16_val = (int16_t)(-1500 - i * 10);
+                err = embedded_flash_set_int16(key, write_data.int16_val);
+                expected_len = 2;
+                break;
+            case EFLASH_FORMAT_UINT32:
+                write_data.uint32_val = (uint32_t)(1000000 + i * 1000);
+                err = embedded_flash_set_uint32(key, write_data.uint32_val);
+                expected_len = 4;
+                break;
+            case EFLASH_FORMAT_INT32:
+                write_data.int32_val = (int32_t)(-1000 - i * 100);
+                err = embedded_flash_set_int32(key, write_data.int32_val);
+                expected_len = 4;
+                break;
+            case EFLASH_FORMAT_UINT64:
+                write_data.uint64_val = (uint64_t)(0x123456789ABCDEF0ULL + i);
+                err = embedded_flash_set_uint64(key, write_data.uint64_val);
+                expected_len = 8;
+                break;
+            case EFLASH_FORMAT_INT64:
+                write_data.int64_val = (int64_t)(-0x123456789ABCDEF0LL - i);
+                err = embedded_flash_set_int64(key, write_data.int64_val);
+                expected_len = 8;
+                break;
+            case EFLASH_FORMAT_FLOAT:
+                write_data.float_val = (float)(3.14159f + i * 0.1f);
+                err = embedded_flash_set_float(key, write_data.float_val);
+                expected_len = 4;
+                break;
+            case EFLASH_FORMAT_STRING: {
+                char str_buf[KV_MAX_VALUE_SIZE];
+                str_buf[0] = 'T';
+                str_buf[1] = '0' + (i % 10);
+                str_buf[2] = '\0';
+                strcpy(write_data.string_val, str_buf);
+                err = embedded_flash_set_string(key, write_data.string_val);
+                expected_len = strlen(write_data.string_val) + 1;
+                break;
+            }
+            case EFLASH_FORMAT_HEX: {
+                for (int j = 0; j < 4; j++) {
+                    write_data.hex_val[j] = (uint8_t)(0xAA + i + j);
+                }
+                err = embedded_flash_set_hex(key, write_data.hex_val, 4);
+                expected_len = 4;
+                break;
+            }
+            default:
+                TEST_FAIL_MESSAGE("Unsupported data type in corruption test");
+                return;
+        }
+        
+        TEST_ASSERT_EQUAL_INT(EF_OK, err);
+        
+        // 保存快照
+        snapshots[i].type = data_type;
+        snapshots[i].len = expected_len;
+        memcpy(snapshots[i].data, write_data.raw, expected_len);
+        snapshots[i].exists = true;
+    }
+    UnityPrint("Step 1: All test data written successfully\n");
+    
+    // ========== 步骤2: 读取并验证数据 ==========
+    UnityPrint("Step 2: Verifying written data...\n");
+    for (uint8_t i = 0; i < num_test_keys; i++) {
+        uint8_t key = test_kvs[i].key;
+        uint8_t read_len = 0;
+        uint8_t read_type = 0;
+        
+        EF_ErrCode err = embedded_flash_get(key, read_data.raw, &read_len, &read_type);
+        TEST_ASSERT_EQUAL_INT(EF_OK, err);
+        TEST_ASSERT_EQUAL_UINT8(snapshots[i].type, read_type);
+        TEST_ASSERT_EQUAL_UINT8(snapshots[i].len, read_len);
+        TEST_ASSERT_EQUAL_MEMORY(snapshots[i].data, read_data.raw, read_len);
+    }
+    UnityPrint("Step 2: All data verified successfully\n");
+    
+    // ========== 步骤3: 随机破坏扇区头信息 ==========
+    UnityPrint("Step 3: Corrupting sector headers randomly...\n");
+    
+    uint8_t corrupted_count = 0;
+    
+    // 随机破坏部分扇区（至少破坏1个，最多破坏KV_SECTOR_COUNT-1个，保留至少1个正常）
+    uint8_t sectors_to_corrupt = (uint8_t)((test_SysTick_GetTick() % (KV_SECTOR_COUNT - 1)) + 1);
+    
+    for (uint8_t sector_idx = 0; sector_idx < KV_SECTOR_COUNT && corrupted_count < sectors_to_corrupt; sector_idx++) {
+        // 随机决定是否破坏此扇区（50%概率）
+        if ((test_SysTick_GetTick() + sector_idx) % 2 == 0) {
+            continue;  // 跳过此扇区
+        }
+        
+        // 随机决定破坏哪些内容
+        uint32_t rand_val = test_SysTick_GetTick() + sector_idx;
+        bool corrupt_magic = (rand_val % 2 == 0) ? true : false;
+        bool corrupt_status = ((rand_val >> 1) % 3 == 0) ? true : false;
+        bool corrupt_role = ((rand_val >> 3) % 3 == 1) ? true : false;
+        
+        // 确保至少破坏一项
+        if (!corrupt_magic && !corrupt_status && !corrupt_role) {
+            corrupt_magic = true;
+        }
+        
+        // 调用破坏函数
+        EF_ErrCode err = corrupt_sector_header(sector_idx, corrupt_magic, corrupt_status, corrupt_role);
+        
+        if (err == EF_OK) {
+            corrupted_count++;
+            printf("  - Corrupted sector %d (magic=%d, status=%d, role=%d)\n", 
+                   sector_idx, corrupt_magic ? 1 : 0, corrupt_status ? 1 : 0, corrupt_role ? 1 : 0);
+        } else {
+            printf("  - Failed to corrupt sector %d, err=%d\n", sector_idx, err);
+        }
+    }
+    
+    printf("Step 3: Corrupted %d sector(s)\n", corrupted_count);
+    TEST_ASSERT_TRUE_MESSAGE(corrupted_count > 0, "No sectors were corrupted");
+    
+    // ========== 步骤4: 重新初始化（应该触发恢复流程） ==========
+    UnityPrint("Step 4: Re-initializing (should trigger recovery)...\n");
+    EF_ErrCode err = test_embedded_flash_init_helper();
+    TEST_ASSERT_EQUAL_INT(EF_OK, err);
+    UnityPrint("Step 4: Re-initialization completed\n");
+    
+    // ========== 步骤5: 验证所有数据是否正确恢复 ==========
+    UnityPrint("Step 5: Verifying data recovery...\n");
+    for (uint8_t i = 0; i < num_test_keys; i++) {
+        uint8_t key = test_kvs[i].key;
+        uint8_t read_len = 0;
+        uint8_t read_type = 0;
+        
+        // 清空读取缓冲区
+        memset(&read_data, 0, sizeof(read_data));
+        
+        EF_ErrCode err = embedded_flash_get(key, read_data.raw, &read_len, &read_type);
+        
+        // 验证数据存在
+        if (snapshots[i].exists) {
+            TEST_ASSERT_EQUAL_INT(EF_OK, err);
+            TEST_ASSERT_EQUAL_UINT8(snapshots[i].type, read_type);
+            TEST_ASSERT_EQUAL_UINT8(snapshots[i].len, read_len);
+            
+            // 验证数据值
+            switch (snapshots[i].type) {
+                case EFLASH_FORMAT_BOOL:
+                    TEST_ASSERT_EQUAL_UINT8(snapshots[i].data[0], read_data.bool_val);
+                    break;
+                case EFLASH_FORMAT_UINT8:
+                    TEST_ASSERT_EQUAL_UINT8(snapshots[i].data[0], read_data.uint8_val);
+                    break;
+                case EFLASH_FORMAT_INT8:
+                    TEST_ASSERT_EQUAL_INT8(*(int8_t*)snapshots[i].data, read_data.int8_val);
+                    break;
+                case EFLASH_FORMAT_UINT16:
+                    TEST_ASSERT_EQUAL_UINT16(*(uint16_t*)snapshots[i].data, read_data.uint16_val);
+                    break;
+                case EFLASH_FORMAT_INT16:
+                    TEST_ASSERT_EQUAL_INT16(*(int16_t*)snapshots[i].data, read_data.int16_val);
+                    break;
+                case EFLASH_FORMAT_UINT32:
+                    TEST_ASSERT_EQUAL_UINT32(*(uint32_t*)snapshots[i].data, read_data.uint32_val);
+                    break;
+                case EFLASH_FORMAT_INT32:
+                    TEST_ASSERT_EQUAL_INT32(*(int32_t*)snapshots[i].data, read_data.int32_val);
+                    break;
+                case EFLASH_FORMAT_UINT64:
+                    TEST_ASSERT_EQUAL_UINT64(*(uint64_t*)snapshots[i].data, read_data.uint64_val);
+                    break;
+                case EFLASH_FORMAT_INT64:
+                    TEST_ASSERT_EQUAL_INT64(*(int64_t*)snapshots[i].data, read_data.int64_val);
+                    break;
+                case EFLASH_FORMAT_FLOAT:
+                    TEST_ASSERT_EQUAL_FLOAT(*(float*)snapshots[i].data, read_data.float_val);
+                    break;
+                case EFLASH_FORMAT_STRING:
+                    TEST_ASSERT_EQUAL_STRING((char*)snapshots[i].data, read_data.string_val);
+                    break;
+                case EFLASH_FORMAT_HEX:
+                    TEST_ASSERT_EQUAL_MEMORY(snapshots[i].data, read_data.hex_val, snapshots[i].len);
+                    break;
+                default:
+                    TEST_FAIL_MESSAGE("Unsupported data type in verification");
+                    break;
+            }
+        }
+    }
+    UnityPrint("Step 5: All data verified successfully after recovery\n");
+    UnityPrint("test_embedded_flash_sector_header_corruption_recovery completed successfully!\n");
+}
+
+/**
  * @brief 掉电测试 - 测试断电恢复功能
  */
 static void test_embedded_flash_power_loss_test(void) {
@@ -1798,6 +2138,8 @@ int test_group_gc_power_loss(void) {
     RUN_TEST(test_embedded_flash_gc_test);
     CHECK_FAIL_AND_STOP();
     RUN_TEST(test_embedded_flash_gc_stress_test);
+    CHECK_FAIL_AND_STOP();
+    RUN_TEST(test_embedded_flash_sector_header_corruption_recovery);
     CHECK_FAIL_AND_STOP();
     RUN_TEST(test_embedded_flash_power_loss_test);
     CHECK_FAIL_AND_STOP();
