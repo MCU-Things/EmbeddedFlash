@@ -44,7 +44,9 @@
                    (level)==EFLASH_LOG_LEVEL_WARN  ? "WARN " :                            \
                    (level)==EFLASH_LOG_LEVEL_ERROR ? "ERROR" : "ALL  ",                   \
                    ##__VA_ARGS__);                                                        \
-        }                                                                                 \
+            printf("\r\n");                                                                      \
+            fflush(stdout);                                                                     \
+        }                                                                                         \
     } while(0)
 #endif
 
@@ -70,11 +72,11 @@
 /* ==================== 打印 HEX 数据宏 ==================== */
 #define EFLASH_PRINT_HEX(desc, buf, len) \
     do { \
-        EFLASH_LOGD("HEX[%s]: [", (desc)); \
+        printf("HEX[%s]: [", (desc)); \
         for (uint32_t _i = 0; _i < (len); ++_i) { \
-            EFLASH_LOGD("%02X ", (uint8_t)((buf)[_i])); \
+            printf("%02X ", (uint8_t)((buf)[_i])); \
         } \
-        EFLASH_LOGD("]\n"); \
+        printf("]\n"); \
     } while(0)
 
 /* ==================== 错误码定义 ==================== */

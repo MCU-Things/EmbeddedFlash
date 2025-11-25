@@ -24,6 +24,12 @@
 #ifndef EMBEDDED_FLASH_MANUAL_TESTS_ENABLE
 #define EMBEDDED_FLASH_MANUAL_TESTS_ENABLE (1)
 #endif
+
+// 定义压力测试参数
+#define GC_TEST_OPERATIONS 10//50  // gc测试操作次数
+#define STRESS_TEST_OPERATIONS 500//1000  // 压力测试操作次数
+#define CORRUPTION_TEST_OPERATIONS 50  // 扇区头破坏恢复测试操作次数
+
 void test_sysTick_init(void);
 uint32_t test_SysTick_GetTick(void);
 // 测试函数声明

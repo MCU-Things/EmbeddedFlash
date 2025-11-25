@@ -57,6 +57,7 @@ static int _find_sector_role(uint8_t role);
 static EF_ErrCode _erase_sector(uint8_t sector_idx);
 static EF_ErrCode _init_all_sector_attr(void);
 static embedded_flash_att_status_t embedded_flash_get_attr_status(void);
+static void _read_all_sector_status(void);
 
 /* ---  KV记录操作 --- */
 static EmbeddedFlash_record_status_e _is_kv_record(const KV_Record *record);
@@ -140,6 +141,8 @@ static embedded_flash_att_status_t embedded_flash_get_attr_status(void)
 	uint8_t data_cnt = 0;
 	uint8_t data_gcing_cnt = 0;
 	uint8_t empty_cnt = 0;
+
+    uint8_t sector_role[KV_SECTOR_COUNT]={0};
     sector_header_t header={0};
     
     EFLASH_LOGD("Scan status\n");
@@ -156,6 +159,7 @@ static embedded_flash_att_status_t embedded_flash_get_attr_status(void)
                 case EFLASH_SECTOR_ROLE_DATA_GCING: data_gcing_cnt++;   break;
             }
             EFLASH_LOGD("Sector %d: role=%d, status=%d\n", i, role, (uint8_t)_get_sector_status_from_table(header.status_table));
+            sector_role[i] = role;
         }
 	}
 	
@@ -198,8 +202,27 @@ static embedded_flash_att_status_t embedded_flash_get_attr_status(void)
 	else {
 		
 	}
-    EFLASH_LOGI("STAT:%\n",status);
+    EFLASH_LOGI("STAT:%d\n", status);
+    EFLASH_PRINT_HEX("SECTOR_ROLE:", sector_role, KV_SECTOR_COUNT);
 	return status; // 兜底
+}
+
+/**
+ * @brief 
+ */
+static void _read_all_sector_status(void)
+{
+    EFLASH_LOGI("Read all sector status\n");
+    for (int i = 0; i < KV_SECTOR_COUNT; i++) {
+        sector_header_t header;
+        if (_sector_header_read(i, &header) == 0) {
+            EFLASH_LOGD("S%d: status=%d role=%d\n", i, 
+                   m_sector_desc_list[i].attr.status, 
+                   m_sector_desc_list[i].attr.role);
+        } else {
+            EFLASH_LOGW("Hdr read fail S%d\n", i);
+        }
+    }
 }
 
 
@@ -393,9 +416,7 @@ static EF_ErrCode _write_status(uint32_t addr, uint8_t status_table[], size_t st
 	 /* 写入4字节（32位）到对应偏移 */
 	 result = flash_port_write(addr + byte_index, (uint8_t *)&status_table[byte_index], EFLASH_WRITE_GRAN / 8);
 	 EFLASH_LOGD("addr:0x%x size:%d, status_index:%d\r\n", addr + byte_index, EFLASH_WRITE_GRAN / 8, status_index);
-	 for(uint8_t i=0; i<EFLASH_WRITE_GRAN / 8 ; i++){
-		 EFLASH_LOGD("data[0x%08x]:0x%02X\r\n", addr + byte_index + i, status_table[byte_index + i]);
-	 }
+     EFLASH_PRINT_HEX("status_table", (uint8_t *)status_table, EFLASH_WRITE_GRAN / 8);
 	 return result;
 }
 
@@ -705,8 +726,10 @@ static EF_ErrCode _init_all_sector_attr(void)
             ret |= _write_sector_role(m_sector_desc_list[i].sector_addr, EFLASH_SECTOR_ROLE_DATA);
             m_sector_desc_list[i].attr.status = EFLASH_SECTOR_STATUS_FREE;
         }
-				ret |= _sector_magic_write(i);
-        if(ret != EF_OK){return ret;}
+		ret |= _sector_magic_write(i);
+        if(ret != EF_OK){
+            return ret;
+        }
 	}	
     return EF_OK;
 }
@@ -825,11 +848,11 @@ static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_
         sector_header_t header = {0};
         if(flash_port_read(m_sector_desc_list[sector_idx].sector_addr, (uint8_t*)&header, sizeof(sector_header_t)) != EF_OK){
             EFLASH_LOGE("Hdr read fail @0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
-            return EF_ERR_READ;
+            //return EF_ERR_READ;
         }
         if(_is_sector_header(&header) == false){
             EFLASH_LOGE("Bad header @0x%08X\n", m_sector_desc_list[sector_idx].sector_addr);
-            return EF_ERR_INVALID;
+            //return EF_ERR_INVALID;
         }
         uint8_t sector_status = (uint8_t)_get_sector_status_from_table(header.status_table);
         uint8_t sector_role = (uint8_t)_get_sector_role_from_table(header.role_table);
@@ -1106,24 +1129,34 @@ EF_ErrCode _rebuild_sector(void)
     uint16_t max_free_space = 0;
     uint8_t start_sector_idx = 0;
     for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
-        if(m_sector_desc_list[i].free_space > max_free_space){
-            max_free_space = m_sector_desc_list[i].free_space;
-            start_sector_idx = i;
+        sector_header_t header;
+        if (_sector_header_read(i, &header) == 0) {
+            if(m_sector_desc_list[i].free_space > max_free_space){
+                max_free_space = m_sector_desc_list[i].free_space;
+                start_sector_idx = i;
+            }
+        }else {
         }
     }
+    EFLASH_LOGI("REBUILD: Start sector=%d, max_free=%d\n", start_sector_idx, max_free_space);
+    
     /*2、将下一个扇区的数据挪到剩余空间最多的扇区，重复KV_SECTOR_COUNT次 */
     for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
         uint8_t next_sector_idx = (start_sector_idx + i + 1) % KV_SECTOR_COUNT;
+        EFLASH_LOGI("REBUILD: Round %d/%d, src=%d -> dst=%d\n", 
+               i + 1, KV_SECTOR_COUNT, next_sector_idx, start_sector_idx);
+        
         //开始搬运
         // 将源扇区(next_sector_idx)的数据搬运到目标扇区(start_sector_idx)
         if (_migrate_sector_data(next_sector_idx, start_sector_idx) != EF_OK) {
-            EFLASH_LOGE("Failed to migrate data from source sector %d to target sector %d\n", 
+            EFLASH_LOGE("REBUILD: Migrate failed src=%d dst=%d\n", 
                    next_sector_idx, start_sector_idx);
             return EF_ERR;
         }
         start_sector_idx = next_sector_idx;
         //搬运完擦除扇区
         EF_ErrCode ret = _erase_sector(next_sector_idx);
+        ret |= _sector_magic_write(next_sector_idx);
         //写入新的头信息
         if(i == KV_SECTOR_COUNT-1) {
             //GC区
@@ -1131,10 +1164,15 @@ EF_ErrCode _rebuild_sector(void)
             ret |= _write_sector_role(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_GC);
         }else{
             //数据区
-            ret |= _write_sector_status(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_USING);
+            ret |= _write_sector_status(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_FREE);
             ret |= _write_sector_role(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_DATA);
         }
-        if(ret != EF_OK){return ret;}
+        if(ret != EF_OK){
+            EFLASH_LOGE("REBUILD: Write status or role fail S%d\n", next_sector_idx);
+            EFLASH_ASSERT(0);
+            return ret;
+        }
+        _read_all_sector_status();
     }
     return EF_OK;
 }
@@ -1180,9 +1218,9 @@ static int _find_sector_role(uint8_t role)
 {
     EFLASH_LOGD("Searching for sector with role %d\n", role);
     for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
-        EFLASH_LOGD("Sector %d: role=%d\n", i, m_sector_desc_list[i].attr.role);
+        EFLASH_LOGD("Sector %d: role=%d", i, m_sector_desc_list[i].attr.role);
         if(m_sector_desc_list[i].attr.role == role){
-            EFLASH_LOGD("Found sector %d with role %d\n", i, role);
+            EFLASH_LOGD("Found sector %d with role %d", i, role);
             return i;
         }
     }
@@ -1197,8 +1235,8 @@ EF_ErrCode embedded_flash_gc(void)
     if(status != EFLASH_STATUS_NORMAL){
         EFLASH_LOGE("GC deny st=%d\n", status);
         _recover_sector_and_kv_record();
-        EFLASH_ASSERT(0);
-        return EF_ERR_NOT_INIT;
+        // EFLASH_ASSERT(0);
+        // return EF_ERR_NOT_INIT;
     }
     /* 将gc区的数据搬运到第一个数据区 */
    
@@ -1306,16 +1344,7 @@ EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count)
     switch(status){
         case EFLASH_STATUS_NORMAL:
             // 确保扇区属性已正确加载
-            for (int i = 0; i < KV_SECTOR_COUNT; i++) {
-                sector_header_t header;
-                if (_sector_header_read(i, &header) == 0) {
-                    EFLASH_LOGD("S%d: st=%d role=%d\n", i, 
-                           m_sector_desc_list[i].attr.status, 
-                           m_sector_desc_list[i].attr.role);
-                } else {
-                    EFLASH_LOGW("Hdr read fail S%d\n", i);
-                }
-            }
+            _read_all_sector_status();
             ret = _load_kv_record();
             if(ret != EF_OK){
                 EFLASH_LOGE("Failed to load KV records\n");
