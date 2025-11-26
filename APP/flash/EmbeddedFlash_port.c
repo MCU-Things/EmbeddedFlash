@@ -7,7 +7,7 @@
  * - 编程方式: 字(32位)编程
  * - 擦除后值为0xFFFFFFFF
  */
-
+#define EFLASH_LOG_TAG "EF_PORT"
 #include "EmbeddedFlash_port.h"
 #include "EmbeddedFlash_def.h"
 #include "stm32f10x_flash.h"
