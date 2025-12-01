@@ -8,9 +8,12 @@
  * - 擦除后值为0xFFFFFFFF
  */
 
+// 项目内部头文件
 #include "EmbeddedFlash_port.h"
-#include "EmbeddedFlash_def.h"
+#include "EmbeddedFlash_log.h"
 #include "stm32f10x_flash.h"
+
+// 系统头文件
 #include <string.h>
 
 /**

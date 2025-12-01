@@ -20,7 +20,7 @@
 #define FLASH_SIZE                  (512 * 1024)              /* 512KB */
 
 /* ==================== 功能开关配置 ==================== */
-#define EFLASH_ENABLE_ERASE_COUNTER  (1)  // 启用扇区擦除次数统计功能（0=关闭，1=开启）
+#define EFLASH_ENABLE_ERASE_COUNTER  (0)  // 启用扇区擦除次数统计功能（0=关闭，1=开启）
 #define CHIP_FLASH_ERASE_MAXTIMES   (10000)  // Flash最大擦除次数限制
 
 /* ==================== Flash写入粒度配置 ==================== */

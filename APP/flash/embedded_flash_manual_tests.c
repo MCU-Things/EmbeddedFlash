@@ -26,9 +26,6 @@
 
 // 包含EmbeddedFlash相关头文件（在Unity之前包含，确保类型定义可用）
 #include "EmbeddedFlash.h"
-#include "EmbeddedFlash_def.h"
-#include "EmbeddedFlash_config.h"
-#include "EmbeddedFlash_port.h"
 
 // 包含Unity测试框架
 #include "Unity/unity.h"
@@ -839,8 +836,7 @@ static void test_embedded_flash_min_length_data(void) {
     
     // 1字节HEX测试
     uint8_t hex_data = 0x55;
-    uint8_t read_hex = 0;
-    
+
     err = embedded_flash_set_hex(TEST_HEX_4_A6_166, &hex_data, 1);
     TEST_ASSERT_EQUAL_INT(EF_OK, err);
     UnityPrint("  - 1-byte hex write: OK\n");
@@ -2470,5 +2466,5 @@ int embedded_flash_quick_manual_test(void) {
  */
 	
 	
- 
+	
  

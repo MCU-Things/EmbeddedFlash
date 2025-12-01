@@ -11,8 +11,11 @@
 #ifndef __EMBEDDED_FLASH_PORT_H__
 #define __EMBEDDED_FLASH_PORT_H__
 
+// 项目内部头文件
 #include "EmbeddedFlash_def.h"
 #include "stm32f10x.h"
+
+// 系统头文件
 #include <stdint.h>
 #include <stddef.h>
 

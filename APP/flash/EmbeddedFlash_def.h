@@ -7,77 +7,13 @@
 #ifndef __EMBEDDED_FLASH_DEF_H__
 #define __EMBEDDED_FLASH_DEF_H__
 
+// 项目内部头文件
 #include "EmbeddedFlash_config.h"
+
+// 系统头文件
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <stdarg.h>
 
-
-
-
-
-
-/* ==================== 日志输出宏 ==================== */
-// 统一的日志入口，带有等级筛选与模块名前缀
-#ifndef EFLASH_LOG_TAG
-#define EFLASH_LOG_TAG "EmbeddedFlash"
-#endif
-
-// #ifndef EFLASH_PRINTF_REAL
-// static inline int EFLASH_PRINTF_REAL(const char *fmt, ...) {
-//     va_list ap;
-//     va_start(ap, fmt);
-//     int n = vprintf(fmt, ap);
-//     va_end(ap);
-//     return n;
-// }
-// #endif
-
-#ifndef EFLASH_LOG
-#define EFLASH_LOG(level, fmt, ...)                                                       \
-    do {                                                                                  \
-        if ((level) >= EFLASH_LOG_LEVEL && (level) < EFLASH_LOG_LEVEL_NONE) {             \
-            printf("[" EFLASH_LOG_TAG "][%s] " fmt,                            \
-                   (level)==EFLASH_LOG_LEVEL_DEBUG ? "DEBUG" :                            \
-                   (level)==EFLASH_LOG_LEVEL_INFO  ? "INFO " :                            \
-                   (level)==EFLASH_LOG_LEVEL_WARN  ? "WARN " :                            \
-                   (level)==EFLASH_LOG_LEVEL_ERROR ? "ERROR" : "ALL  ",                   \
-                   ##__VA_ARGS__);                                                        \
-            printf("\r\n");                                                                      \
-            fflush(stdout);                                                                     \
-        }                                                                                         \
-    } while(0)
-#endif
-
-#define EFLASH_LOGA(fmt, ...) EFLASH_LOG(EFLASH_LOG_LEVEL_ALL,   fmt, ##__VA_ARGS__)
-#define EFLASH_LOGD(fmt, ...) EFLASH_LOG(EFLASH_LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
-#define EFLASH_LOGI(fmt, ...) EFLASH_LOG(EFLASH_LOG_LEVEL_INFO,  fmt, ##__VA_ARGS__)
-#define EFLASH_LOGW(fmt, ...) EFLASH_LOG(EFLASH_LOG_LEVEL_WARN,  fmt, ##__VA_ARGS__)
-#define EFLASH_LOGE(fmt, ...) EFLASH_LOG(EFLASH_LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
-
-/* ==================== 断言宏定义 ==================== */
-// #ifdef EMBEDDED_FLASH_ENABLE_ASSERT
-#define EFLASH_ASSERT(expr) \
-    do { \
-        if (!(expr)) { \
-            EFLASH_LOGE("ASSERT FAILED: %s, file %s, line %d\n", #expr, __FILE__, __LINE__); \
-            while(1); /* 进入死循环，等待复位或调试器介入 */ \
-        } \
-    } while(0)
-// #else
-//     #define EFLASH_ASSERT(expr) ((void)0)
-// #endif
-
-/* ==================== 打印 HEX 数据宏 ==================== */
-#define EFLASH_PRINT_HEX(desc, buf, len) \
-    do { \
-        printf("HEX[%s]: [", (desc)); \
-        for (uint32_t _i = 0; _i < (len); ++_i) { \
-            printf("%02X ", (uint8_t)((buf)[_i])); \
-        } \
-        printf("]\n"); \
-    } while(0)
 
 /* ==================== 错误码定义 ==================== */
 /* 统一以 EF_ 前缀命名 */

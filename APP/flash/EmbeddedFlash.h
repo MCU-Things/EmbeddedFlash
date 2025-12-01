@@ -2,8 +2,11 @@
 #ifndef __EMBEDDED_FLASH_H__
 #define __EMBEDDED_FLASH_H__
 
+// 项目内部头文件
 #include "EmbeddedFlash_def.h"
 #include "EmbeddedFlash_port.h"
+
+// 系统头文件
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -27,7 +30,8 @@ EF_ErrCode embedded_flash_set_float(uint8_t key, float value);
 // 可变长度数据类型的设置函数
 EF_ErrCode embedded_flash_set_string(uint8_t key, const char *value);
 EF_ErrCode embedded_flash_set_hex(uint8_t key, const uint8_t *value, uint8_t length);
-
+// 通用设置函数
+EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length, uint8_t data_type);
 // 通用获取函数
 EF_ErrCode embedded_flash_get(uint8_t key, uint8_t *value, uint8_t *length, uint8_t *data_type);
 // 删除函数
