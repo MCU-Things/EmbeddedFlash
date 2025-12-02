@@ -1169,18 +1169,24 @@ static EF_ErrCode corrupt_sector_header(uint8_t sector_idx, bool corrupt_magic, 
     sector_header_t *header = (sector_header_t*)sector_buffer;
     
     if (corrupt_magic) {
-        // 破坏magic word
-        header->magic = 0xDEADBEEF;
+        // // 破坏magic word
+        // header->magic = 0xDEADBEEF;
+        // 破坏magic word:填充为0x00000000
+        header->magic = 0x40000002;
     }
     
     if (corrupt_status) {
-        // 破坏状态表：填充为0xAA
-        memset(header->status_table, 0xAA, sizeof(header->status_table));
+        // // 破坏状态表：填充为0xAA
+        // memset(header->status_table, 0xAA, sizeof(header->status_table));
+        // 破坏状态表:填充为0x00
+        memset(header->status_table, 0x00, sizeof(header->status_table));
     }
     
     if (corrupt_role) {
-        // 破坏角色表：填充为0x55
-        memset(header->role_table, 0x55, sizeof(header->role_table));
+        // // 破坏角色表：填充为0x55
+        // memset(header->role_table, 0x55, sizeof(header->role_table));
+        // 破坏角色表:填充为0x00
+        memset(header->role_table, 0x00, sizeof(header->role_table));
     }
     
     // 擦除扇区
