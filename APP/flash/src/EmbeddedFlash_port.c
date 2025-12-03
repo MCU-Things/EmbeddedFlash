@@ -40,12 +40,14 @@ static void _sim_flash_init(void) {
     if (!s_sim_flash_initialized) {
         memset(s_sim_flash, 0xFF, SIM_FLASH_SIZE);
         s_sim_flash_initialized = 1;
-        EFLASH_LOGD("RAM Flash sim init OK (size=%d)\n", SIM_FLASH_SIZE);
+        EFLASH_LOGD("RAM Flash sim init OK (sz=%d)\n", SIM_FLASH_SIZE);
     }
 }
 
 /**
  * @brief 将Flash地址转换为RAM缓冲区偏移
+ * @param addr Flash地址
+ * @return RAM缓冲区偏移，0xFFFFFFFF表示无效地址
  */
 static uint32_t _addr_to_offset(uint32_t addr) {
     if (addr >= SIM_FLASH_START_ADDR && 
@@ -58,7 +60,7 @@ static uint32_t _addr_to_offset(uint32_t addr) {
 
 /**
  * @brief Flash硬件初始化
- * @return 错误码
+ * @return EF_ErrCode 错误码，EF_OK表示成功
  */
 EF_ErrCode flash_port_init(void) {
     EF_ErrCode result = EF_OK;
@@ -89,7 +91,7 @@ EF_ErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size) {
     /* 参数检查 */
     if (addr < FLASH_START_ADDR || addr > FLASH_END_ADDR || 
         size > (FLASH_END_ADDR - addr + 1) || buf == NULL) {
-        EFLASH_LOGE("INV read, addr=0x%08X size=%d buf=%p\n", 
+        EFLASH_LOGE("INV read, addr=0x%08X sz=%d buf=%p\n", 
                addr, (int)size, buf);
         return EF_ERR_PARAM;
     }
@@ -121,7 +123,7 @@ EF_ErrCode flash_port_read(uint32_t addr, uint8_t *buf, size_t size) {
  * 
  * @param addr Flash地址（必须按页对齐）
  * @param size 擦除字节数
- * @return 错误码
+ * @return EF_ErrCode 错误码，EF_OK表示成功
  */
 EF_ErrCode flash_port_erase(uint32_t addr, size_t size) {
     EF_ErrCode result = EF_OK;
@@ -157,7 +159,7 @@ EF_ErrCode flash_port_erase(uint32_t addr, size_t size) {
     } else {
         // 地址超出模拟范围，仍然返回成功（因为可能访问其他Flash区域）
         flash_status = FLASH_COMPLETE;
-        EFLASH_LOGD("ERASE sim skip @0x%08X (out of sim range)\n", addr);
+        EFLASH_LOGD("ERASE sim skip @0x%08X (out sim range)\n", addr);
     }
     #else
     /* 开始擦除 */
@@ -191,7 +193,7 @@ EF_ErrCode flash_port_erase(uint32_t addr, size_t size) {
  * @param addr Flash地址（必须4字节对齐）
  * @param buf 要写入的数据缓冲区
  * @param size 写入字节数（必须4字节对齐）
- * @return 错误码
+ * @return EF_ErrCode 错误码，EF_OK表示成功
  */
 EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
     EF_ErrCode result = EF_OK;
@@ -203,7 +205,7 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
     /* 参数检查 */
     if (addr < FLASH_START_ADDR || addr > FLASH_END_ADDR || 
         size > (FLASH_END_ADDR - addr + 1) || buf == NULL) {
-        EFLASH_LOGE("INV param addr=0x%08X size=%d buf=%p\n", addr, (int)size, buf);
+        EFLASH_LOGE("INV param addr=0x%08X sz=%d buf=%p\n", addr, (int)size, buf);
         return EF_ERR_PARAM;
     }
 
@@ -246,7 +248,7 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
 #if (EFLASH_SIM_STRICT_0_TO_1_CHECK == 1)
             if (illegal_bits != 0) {
                 // 尝试将0写为1，严格模式下直接报错
-                EFLASH_LOGE("WRITE sim fail @0x%08X: cannot write 0->1 (cur=0x%08X new=0x%08X, ill=0x%08X)\n",
+                EFLASH_LOGE("WRITE sim fail @0x%08X: 0->1 (cur=0x%08X new=0x%08X, ill=0x%08X)\n",
                             write_addr, current_value, write_value, illegal_bits);
                 result = EF_ERR_WRITE;
                 break;
@@ -269,7 +271,7 @@ EF_ErrCode flash_port_write(uint32_t addr, const uint8_t *buf, size_t size) {
     } else {
         // 地址超出模拟范围，仍然返回成功（因为可能访问其他Flash区域）
         flash_status = FLASH_COMPLETE;
-        EFLASH_LOGD("WRITE sim skip @0x%08X (out of sim range)\n", addr);
+        EFLASH_LOGD("WRITE sim skip @0x%08X (out sim range)\n", addr);
     }
     #else
     FLASH_Unlock();
@@ -330,7 +332,7 @@ void flash_port_unlock(void) {
 /**
  * @brief Flash接口测试函数
  * @param test_addr 测试地址
- * @return 错误码
+ * @return EF_ErrCode 错误码，EF_OK表示成功
  */
 EF_ErrCode flash_port_test(uint32_t test_addr) {
     EF_ErrCode result = EF_OK;

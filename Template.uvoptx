@@ -164,7 +164,7 @@
           <Type>0</Type>
           <LineNumber>59</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134220708</Address>
+          <Address>134220704</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -722,8 +722,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>.\APP\flash\EmbeddedFlash.c</PathWithFileName>
-      <FilenameWithoutPath>EmbeddedFlash.c</FilenameWithoutPath>
+      <PathWithFileName>.\APP\flash\tests\embedded_flash_manual_tests.c</PathWithFileName>
+      <FilenameWithoutPath>embedded_flash_manual_tests.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -734,8 +734,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>.\APP\flash\EmbeddedFlash_port.c</PathWithFileName>
-      <FilenameWithoutPath>EmbeddedFlash_port.c</FilenameWithoutPath>
+      <PathWithFileName>.\APP\flash\tests\Unity\unity.c</PathWithFileName>
+      <FilenameWithoutPath>unity.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -746,8 +746,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>.\APP\flash\Unity\unity.c</PathWithFileName>
-      <FilenameWithoutPath>unity.c</FilenameWithoutPath>
+      <PathWithFileName>.\APP\flash\src\EmbeddedFlash.c</PathWithFileName>
+      <FilenameWithoutPath>EmbeddedFlash.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -758,8 +758,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>.\APP\flash\embedded_flash_manual_tests.c</PathWithFileName>
-      <FilenameWithoutPath>embedded_flash_manual_tests.c</FilenameWithoutPath>
+      <PathWithFileName>.\APP\flash\src\EmbeddedFlash_port.c</PathWithFileName>
+      <FilenameWithoutPath>EmbeddedFlash_port.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
