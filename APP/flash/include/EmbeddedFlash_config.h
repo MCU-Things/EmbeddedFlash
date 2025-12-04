@@ -14,7 +14,7 @@
  * - 编程方式: 字(32位)编程
  * - 擦除后值为0xFFFFFFFF
  */
-#define FLASH_PAGE_SIZE             (0x800U)                  /* 2KB per page */
+#define FLASH_PAGE_SIZE             (0x100U)                  /* 2KB per page */
 #define FLASH_START_ADDR            (0x08000000U)             /* Flash起始地址 */
 #define FLASH_END_ADDR              (0x0807FFFFU)             /* Flash结束地址 (512KB) */
 #define FLASH_SIZE                  (512 * 1024)              /* 512KB */
@@ -75,7 +75,7 @@
 
 // 默认日志等级（可根据需要修改）：INFO 更加精简，DEBUG 更详细
 #ifndef EFLASH_LOG_LEVEL
-#define EFLASH_LOG_LEVEL EFLASH_LOG_LEVEL_WARN
+#define EFLASH_LOG_LEVEL EFLASH_LOG_LEVEL_ALL
 #endif
 
 #endif /* __EMBEDDED_FLASH_CONFIG_H__ */

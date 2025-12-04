@@ -181,11 +181,12 @@ typedef struct {
 
 /* 扇区描述符，用于运行时跟踪和管理扇区 */
 typedef struct {
-    uint32_t  sector_addr;    // 扇区地址
-    uint8_t   sector_idx;     // 扇区索引(固定值) 0-3，按地址顺序排列
+    uint32_t  sector_addr;      // 扇区地址
+    uint8_t   sector_idx;       // 扇区索引
     sector_attr_t   attr;           // 扇区属性信息
     uint16_t        free_space;     // 剩余空间
-    uint16_t        record_count;   // 记录数
+    uint16_t        total_record_count; // 总记录数（包括有效和无效记录）
+    uint16_t        valid_record_count; // 有效记录数（仅WRITE状态的记录）
 } sector_desc_t;
 
 /* 错误记录结构体 */
@@ -221,6 +222,11 @@ typedef struct {
 /* ==================== 宏定义 ==================== */
 // KV记录偏移量定义（用于状态表和数据分离）
 #define KV_MAGIC_OFFSET      ((uint32_t)(&((KV_Record *)0)->magic))
+
+// 地址转扇区索引宏
+// 计算给定地址所属的扇区索引
+// 注意：addr必须是有效的扇区内地址
+#define ADDR_TO_SECTOR_IDX(addr)  ((uint8_t)((addr - KV_SECTOR_START_ADDR) / KV_SECTOR_SIZE))
 
 #endif /* __EMBEDDED_FLASH_DEF_H__ */
 

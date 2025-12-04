@@ -673,7 +673,8 @@ static uint32_t _write_kv_record_to_sector(uint8_t sector_idx, KV_Record *p)
     
     // 更新扇区信息
     m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
-    m_sector_desc_list[sector_idx].record_count++;
+    m_sector_desc_list[sector_idx].total_record_count++;
+    m_sector_desc_list[sector_idx].valid_record_count++;
     m_sector_desc_list[sector_idx].free_space -= sizeof(KV_Record);
 
     // 检查扇区是否已满
@@ -769,7 +770,8 @@ static EF_ErrCode _erase_sector(uint8_t sector_idx) {
             // 重置扇区信息
             m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
             m_sector_desc_list[sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);  // 减去扇区头大小
-            m_sector_desc_list[sector_idx].record_count = 0;
+            m_sector_desc_list[sector_idx].total_record_count = 0;
+            m_sector_desc_list[sector_idx].valid_record_count = 0;
             
             #if EFLASH_ENABLE_ERASE_COUNTER
             // 更新擦除统计信息
@@ -959,7 +961,8 @@ static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_
 {
     for(uint8_t sector_idx = 0; sector_idx < KV_SECTOR_COUNT; sector_idx++){
         //初始化扇区信息
-        uint16_t record_count = 0;
+        uint16_t total_record_count = 0;
+        uint16_t valid_record_count = 0;
         uint16_t free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);
         
         //读取扇区头
@@ -987,11 +990,18 @@ static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_
                 continue;
             }
             // 检查记录基本有效性（magic、CRC等）
-            if (_is_kv_record(&record) != EFLASH_KV_UNUSED) {
+            EmbeddedFlash_record_status_e record_status = _is_kv_record(&record);
+            if (record_status != EFLASH_KV_UNUSED) {
+                total_record_count++;
+                
+                // 统计PRE_WRITE和WRITE状态的有效记录
+                if (record_status == EFLASH_KV_PRE_WRITE || record_status == EFLASH_KV_WRITE) {
+                    valid_record_count++;
+                }
+                
                 if(func != NULL){
                     func(&record, scan_addr);
                 }
-                record_count++;
             } else {
                 EFLASH_LOGD("Bad rec @0x%08X\n", scan_addr);
                 EFLASH_LOGD_PRINT_HEX("record", (uint8_t*)&record, sizeof(KV_Record));
@@ -1019,14 +1029,15 @@ static EF_ErrCode _iteration(EF_ErrCode (*func)(KV_Record *record, uint32_t abs_
 
         // 更新扇区状态信息
         m_sector_desc_list[sector_idx].free_space = sector_end_addr - scan_addr;
-        m_sector_desc_list[sector_idx].record_count = record_count;
+        m_sector_desc_list[sector_idx].total_record_count = total_record_count;
+        m_sector_desc_list[sector_idx].valid_record_count = valid_record_count;
 
         m_sector_desc_list[sector_idx].attr.status = sector_status;//这个状态会根据记录数和剩余空间更新
         m_sector_desc_list[sector_idx].attr.role = sector_role;//这个角色不会改变
         // 设置扇区状态
         if (m_sector_desc_list[sector_idx].free_space < sizeof(KV_Record)) {
             m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FULL;
-        } else if (record_count > 0) {
+        } else if (total_record_count > 0) {
             m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_USING;
         } else {
             m_sector_desc_list[sector_idx].attr.status = EFLASH_SECTOR_STATUS_FREE;
@@ -1215,8 +1226,10 @@ static EF_ErrCode _migrate_sector_data(uint8_t source_sector_idx, uint8_t target
                 EFLASH_LOGD("DEL fail @0x%08X\n", source_sector_start_addr);
                 return EF_ERR_WRITE;
             }
-            
-            //更新ram中的地址
+            // 更新源扇区描述符中的有效记录数
+            uint8_t source_sector_idx = ADDR_TO_SECTOR_IDX(source_sector_start_addr);
+            m_sector_desc_list[source_sector_idx].valid_record_count--;
+            // 更新ram中的地址
             kv_data_t *p_kv_data = _find_kv_data(record.key);
             if(p_kv_data != NULL){
                 p_kv_data->addr_abs = new_record_addr;
@@ -1253,25 +1266,54 @@ EF_ErrCode _rebuild_sector(void)
     /* 重建扇区的目的就是让整个持久化存储组件中只有一个gc扇区其余全是数据区，这个过程可能涉及到数据的搬运 */
     
 
-    /*1、找到一个剩余空间最多的扇区*/
+    // /*1、找到一个剩余空间最多的扇区*/
+    // uint16_t max_free_space = 0;
+    // uint8_t start_sector_idx = 0;
+    // for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
+    //     //这里不需要读取扇区头信息，因为已经读取过了
+    //     // sector_header_t header;
+    //     // if (_sector_header_read(i, &header) == true) {
+    //         if(m_sector_desc_list[i].free_space > max_free_space){
+    //             max_free_space = m_sector_desc_list[i].free_space;
+    //             start_sector_idx = i;
+    //         }
+    //     // }
+    // }
+    /* 1、找到剩余空间最多的扇区，然后将剩下的扇区根据有效记录对扇区进行排列，有效数据越少排的越前面 */
     uint16_t max_free_space = 0;
-    uint8_t start_sector_idx = 0;
+    uint8_t start_sector_idx = 0xff;
+
+    uint16_t valid_record_min = 0xffff;
+    uint8_t valid_record_min_sector_idx = 0;
+    //找剩余空间最大的空间
     for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
-        sector_header_t header;
-        if (_sector_header_read(i, &header) == true) {
-            if(m_sector_desc_list[i].free_space > max_free_space){
-                max_free_space = m_sector_desc_list[i].free_space;
-                start_sector_idx = i;
-            }
+        if(m_sector_desc_list[i].free_space > max_free_space){
+            max_free_space = m_sector_desc_list[i].free_space;
+            start_sector_idx = i;
+        }
+        if(m_sector_desc_list[i].valid_record_count < valid_record_min && start_sector_idx != i){
+            valid_record_min = m_sector_desc_list[i].valid_record_count;
+            valid_record_min_sector_idx = i;
         }
     }
-    EFLASH_LOGI("REBUILD: Start sector=%d, max_free=%d\n", start_sector_idx, max_free_space);
-    
-    /*2、将下一个扇区的数据挪到剩余空间最多的扇区，重复KV_SECTOR_COUNT次 */
-    for(uint8_t i = 0; i < KV_SECTOR_COUNT; i++){
-        uint8_t next_sector_idx = (start_sector_idx + i + 1) % KV_SECTOR_COUNT;
-        EFLASH_LOGD("REBUILD: Round %d/%d, src=%d -> dst=%d\n", 
-               i + 1, KV_SECTOR_COUNT, next_sector_idx, start_sector_idx);
+   
+    EFLASH_LOGI("REBUILD: Start S=%d, max_free=%d, src=%d valid=%d\n", start_sector_idx, max_free_space, valid_record_min_sector_idx, valid_record_min);
+    /*2、搬运数据，使用do-while循环执行KV_SECTOR_COUNT+1次 */
+    uint8_t i = 0;
+    do {
+        uint8_t next_sector_idx;
+        
+        // 首次搬运：优先处理有效记录最少的扇区
+        if (i == 0) {
+            next_sector_idx = valid_record_min_sector_idx;
+            EFLASH_LOGD("REBUILD: Round %d/%d, src=%d -> dst=%d (Priority sector)\n", 
+                   i + 1, KV_SECTOR_COUNT + 1, next_sector_idx, start_sector_idx);
+        } else {
+            // 后续搬运：按照正常顺序处理
+            next_sector_idx = (start_sector_idx + 1) % KV_SECTOR_COUNT;
+            EFLASH_LOGD("REBUILD: Round %d/%d, src=%d -> dst=%d\n", 
+                   i + 1, KV_SECTOR_COUNT + 1, next_sector_idx, start_sector_idx);
+        }
         
         //开始搬运
         // 将源扇区(next_sector_idx)的数据搬运到目标扇区(start_sector_idx)
@@ -1281,12 +1323,14 @@ EF_ErrCode _rebuild_sector(void)
             return EF_ERR;
         }
         start_sector_idx = next_sector_idx;
+        
         //搬运完擦除扇区
         EF_ErrCode ret = _erase_sector(next_sector_idx);
         ret |= _write_sector_magic(m_sector_desc_list[next_sector_idx].sector_addr);
+        
         //写入新的头信息
-        if(i == KV_SECTOR_COUNT-1) {
-            //GC区
+        if(i == KV_SECTOR_COUNT) {
+            //GC区 - 最后一次循环
             ret |= _write_sector_status(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_FREE);
             ret |= _write_sector_role(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_GC);
         }else{
@@ -1294,13 +1338,17 @@ EF_ErrCode _rebuild_sector(void)
             ret |= _write_sector_status(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_STATUS_FREE);
             ret |= _write_sector_role(m_sector_desc_list[next_sector_idx].sector_addr, EFLASH_SECTOR_ROLE_DATA);
         }
+        
         if(ret != EF_OK){
             EFLASH_LOGE("REBUILD: Write st/role fail S%d\n", next_sector_idx);
             // EFLASH_ASSERT(0);
             return ret;
         }
+        
         _read_all_sector_status();
-    }
+        
+        i++;
+    } while (i <= KV_SECTOR_COUNT);  // 执行KV_SECTOR_COUNT+1次
     return EF_OK;
 }
 
@@ -1451,7 +1499,8 @@ EF_ErrCode embedded_flash_gc(void)
     m_sector_desc_list[gc_sector_idx].attr.role = EFLASH_SECTOR_ROLE_DATA;
     //6、更新内存中的扇区信息
     m_sector_desc_list[data_sector_idx].free_space = KV_SECTOR_SIZE - sizeof(sector_header_t);
-    m_sector_desc_list[data_sector_idx].record_count = 0;
+    m_sector_desc_list[data_sector_idx].total_record_count = 0;
+    m_sector_desc_list[data_sector_idx].valid_record_count = 0;
     return EF_OK;
 }
 
@@ -1467,7 +1516,8 @@ EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count)
         m_sector_desc_list[i].attr.status = EFLASH_SECTOR_STATUS_FREE;
         m_sector_desc_list[i].attr.role   = EFLASH_SECTOR_ROLE_UNASSIGNED;
         m_sector_desc_list[i].free_space  = KV_SECTOR_SIZE - sizeof(sector_header_t);
-        m_sector_desc_list[i].record_count = 0;
+        m_sector_desc_list[i].total_record_count = 0;
+        m_sector_desc_list[i].valid_record_count = 0;
     }
     // 调试：打印扇区头和KV记录结构体大小
     EFLASH_LOGD("hdr=%dB st=%dB role=%dB kv=%dB kvst=%dB kvoff=%d gran=%db\n", 
@@ -1477,7 +1527,7 @@ EF_ErrCode embedded_flash_init(const kv_data_t *defaults, uint8_t default_count)
         EFLASH_LOGD("S[%d] @0x%08X st=%d role=%d\n", 
                i, m_sector_desc_list[i].sector_addr, 
                m_sector_desc_list[i].attr.status, m_sector_desc_list[i].attr.role);
-               EFLASH_LOGD("S[%d] free=%d cnt=%d\n", i, m_sector_desc_list[i].free_space, m_sector_desc_list[i].record_count);
+               EFLASH_LOGD("S[%d] free=%d total=%d valid=%d\n", i, m_sector_desc_list[i].free_space, m_sector_desc_list[i].total_record_count, m_sector_desc_list[i].valid_record_count);
     }
 
     if (defaults == NULL || default_count == 0 || default_count > 255) {
@@ -1753,6 +1803,8 @@ EF_ErrCode embedded_flash_set(uint8_t key, const uint8_t *value, uint8_t length,
             EFLASH_LOGD("DEL fail @0x%08X\n", p_kv_data->addr_abs);
             // return EF_ERR_WRITE;
         }
+        uint8_t sector_idx = ADDR_TO_SECTOR_IDX(p_kv_data->addr_abs);
+        m_sector_desc_list[sector_idx].valid_record_count--;
     }
 
     // printf("length:%d, record.value_length:%d, p_kv_data->value_length:%d\n", length, record.value_length, p_kv_data->value_length);
@@ -1891,10 +1943,12 @@ EF_ErrCode embedded_flash_delete(uint8_t key)
     
     // 使用状态表机制删除记录
     if(_kv_delete_record(p_kv_data->addr_abs, EFLASH_KV_DELETED) != EF_OK){
-        EFLASH_ASSERT(0);
+        // EFLASH_ASSERT(0);
         return EF_ERR;
     }
-    
+    // 更新扇区描述符中的有效记录数
+    uint8_t sector_idx = ADDR_TO_SECTOR_IDX(p_kv_data->addr_abs);
+    m_sector_desc_list[sector_idx].valid_record_count--;
     // 清除RAM中的状态
     p_kv_data->addr_abs = 0;
     p_kv_data->data_source = KV_DATA_SOURCE_DEFAULT;
